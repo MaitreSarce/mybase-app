@@ -2046,6 +2046,180 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
     
     return {"nodes": nodes, "edges": edges}
 
+# ==================== STORAGE USAGE ====================
+
+@api_router.get("/storage/usage")
+async def get_storage_usage(user: dict = Depends(get_current_user)):
+    """Get storage usage for the current user"""
+    total_size = 0
+    file_count = 0
+    
+    # Count files in upload directory associated with user
+    user_id = user["id"]
+    
+    # Get all items with files for this user
+    for col_name in ["inventory", "wishlist", "content", "portfolio", "projects", "tasks"]:
+        col = getattr(db, col_name)
+        items_with_files = await col.find(
+            {"user_id": user_id, "files": {"$exists": True, "$ne": []}},
+            {"_id": 0, "files": 1}
+        ).to_list(10000)
+        for item in items_with_files:
+            for f in item.get("files", []):
+                file_count += 1
+                filepath = f.get("path", "")
+                if filepath:
+                    full_path = ROOT_DIR / filepath.lstrip("/")
+                    if full_path.exists():
+                        total_size += full_path.stat().st_size
+    
+    # Also scan uploads directory for total disk usage
+    disk_total = 0
+    disk_count = 0
+    if UPLOAD_DIR.exists():
+        for f in UPLOAD_DIR.rglob("*"):
+            if f.is_file():
+                disk_total += f.stat().st_size
+                disk_count += 1
+    
+    return {
+        "user_file_count": file_count,
+        "user_size_bytes": total_size,
+        "user_size_mb": round(total_size / (1024 * 1024), 2),
+        "total_disk_bytes": disk_total,
+        "total_disk_mb": round(disk_total / (1024 * 1024), 2),
+        "total_disk_files": disk_count
+    }
+
+# ==================== PORTFOLIO SNAPSHOTS ====================
+
+class TransactionCreate(BaseModel):
+    asset_id: str
+    transaction_type: str  # buy, sell
+    quantity: float
+    price_per_unit: float
+    date: Optional[str] = None
+    fees: Optional[float] = 0
+    notes: Optional[str] = None
+
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    asset_id: str
+    asset_name: Optional[str] = None
+    transaction_type: str
+    quantity: float
+    price_per_unit: float
+    total: float
+    fees: float = 0
+    date: str
+    notes: Optional[str] = None
+    created_at: str
+
+@api_router.post("/portfolio/transactions", response_model=TransactionResponse)
+async def create_transaction(data: TransactionCreate, user: dict = Depends(get_current_user)):
+    # Verify asset exists
+    asset = await db.portfolio.find_one({"id": data.asset_id, "user_id": user["id"]}, {"_id": 0})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Actif non trouvé")
+    
+    tx_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    total = data.quantity * data.price_per_unit
+    
+    doc = {
+        "id": tx_id,
+        "user_id": user["id"],
+        "asset_id": data.asset_id,
+        "asset_name": asset.get("name", ""),
+        "transaction_type": data.transaction_type,
+        "quantity": data.quantity,
+        "price_per_unit": data.price_per_unit,
+        "total": total,
+        "fees": data.fees or 0,
+        "date": data.date or now[:10],
+        "notes": data.notes,
+        "created_at": now
+    }
+    
+    await db.portfolio_transactions.insert_one(doc)
+    doc.pop("_id", None)
+    
+    # Update asset quantity based on transaction
+    if data.transaction_type == "buy":
+        await db.portfolio.update_one(
+            {"id": data.asset_id},
+            {"$inc": {"quantity": data.quantity}}
+        )
+    elif data.transaction_type == "sell":
+        await db.portfolio.update_one(
+            {"id": data.asset_id},
+            {"$inc": {"quantity": -data.quantity}}
+        )
+    
+    return TransactionResponse(**doc)
+
+@api_router.get("/portfolio/transactions", response_model=List[TransactionResponse])
+async def get_transactions(user: dict = Depends(get_current_user), asset_id: Optional[str] = None):
+    query = {"user_id": user["id"]}
+    if asset_id:
+        query["asset_id"] = asset_id
+    txs = await db.portfolio_transactions.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return [TransactionResponse(**tx) for tx in txs]
+
+@api_router.delete("/portfolio/transactions/{tx_id}")
+async def delete_transaction(tx_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_transactions.delete_one({"id": tx_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Transaction non trouvée")
+    return {"message": "Transaction supprimée"}
+
+@api_router.post("/portfolio/snapshots")
+async def create_portfolio_snapshot(user: dict = Depends(get_current_user)):
+    """Create a snapshot of current portfolio value"""
+    assets = await db.portfolio.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    
+    total_value = 0
+    by_type = {}
+    for asset in assets:
+        current = (asset.get("current_price") or asset.get("purchase_price", 0)) * asset.get("quantity", 0)
+        total_value += current
+        asset_type = asset.get("asset_type", "other")
+        by_type[asset_type] = by_type.get(asset_type, 0) + current
+    
+    now = datetime.now(timezone.utc)
+    snap_id = str(uuid.uuid4())
+    doc = {
+        "id": snap_id,
+        "user_id": user["id"],
+        "date": now.strftime("%Y-%m-%d"),
+        "month": now.strftime("%Y-%m"),
+        "total_value": total_value,
+        "by_type": by_type,
+        "asset_count": len(assets),
+        "created_at": now.isoformat()
+    }
+    
+    # Upsert: one snapshot per day
+    await db.portfolio_snapshots.update_one(
+        {"user_id": user["id"], "date": doc["date"]},
+        {"$set": doc},
+        upsert=True
+    )
+    
+    return {"message": "Snapshot créé", "total_value": total_value}
+
+@api_router.get("/portfolio/snapshots")
+async def get_portfolio_snapshots(user: dict = Depends(get_current_user), months: int = 12):
+    """Get portfolio value history"""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+    snapshots = await db.portfolio_snapshots.find(
+        {"user_id": user["id"], "date": {"$gte": cutoff}},
+        {"_id": 0}
+    ).sort("date", 1).to_list(1000)
+    return snapshots
+
 # Include the router in the main app (again for new routes)
 app.include_router(api_router)
 
