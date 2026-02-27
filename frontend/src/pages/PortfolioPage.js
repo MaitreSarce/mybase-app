@@ -280,13 +280,27 @@ const PortfolioPage = () => {
           <h1 className="text-3xl font-bold tracking-tight">Portefeuille</h1>
           <p className="text-muted-foreground mt-1">Suivez vos investissements</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} data-testid="add-asset-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Nouvel actif
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRefreshPrices}
+            disabled={refreshing}
+            data-testid="refresh-prices-btn"
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Actualiser les prix
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => handleOpenDialog()} data-testid="add-asset-btn">
+                <Plus className="h-4 w-4 mr-2" />
+                Nouvel actif
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               <DialogHeader>
