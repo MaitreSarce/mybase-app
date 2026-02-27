@@ -145,6 +145,16 @@ const Layout = () => {
           </nav>
         </ScrollArea>
 
+        {/* Storage info */}
+        {!collapsed && storageInfo && (
+          <div className="px-4 py-2 border-t border-border">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="storage-info">
+              <HardDrive className="h-3 w-3" />
+              <span>{storageInfo.total_disk_mb} Mo ({storageInfo.total_disk_files} fichiers)</span>
+            </div>
+          </div>
+        )}
+
         {/* User section */}
         <div className="p-4 border-t border-border">
           <DropdownMenu>
