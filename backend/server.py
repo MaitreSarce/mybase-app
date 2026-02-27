@@ -1052,7 +1052,9 @@ async def upload_file(
         "inventory": db.inventory,
         "wishlist": db.wishlist,
         "content": db.content,
-        "portfolio": db.portfolio
+        "portfolio": db.portfolio,
+        "project": db.projects,
+        "task": db.tasks
     }
     
     if item_type not in collection_map:
