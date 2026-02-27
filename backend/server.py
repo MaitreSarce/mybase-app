@@ -1282,9 +1282,6 @@ async def global_search(
     
     return results
 
-# Include the router in the main app
-app.include_router(api_router)
-
 # ==================== COINGECKO CRYPTO PRICES ====================
 
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
