@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { portfolioApi } from '../services/api';
+import { portfolioApi, cryptoApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -45,7 +45,8 @@ import {
   ArrowDownRight,
   Wallet,
   X,
-  Tag
+  Tag,
+  RefreshCw
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 
