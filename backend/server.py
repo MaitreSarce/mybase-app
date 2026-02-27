@@ -1716,7 +1716,7 @@ async def unlink_items(
     source_col = collection_map.get(source_type)
     target_col = collection_map.get(target_type)
     
-    if not source_col or not target_col:
+    if source_col is None or target_col is None:
         raise HTTPException(status_code=400, detail="Type d'item invalide")
     
     now = datetime.now(timezone.utc).isoformat()
