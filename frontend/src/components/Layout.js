@@ -15,7 +15,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  Bell
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
