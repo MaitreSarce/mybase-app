@@ -55,6 +55,11 @@ const Layout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [storageInfo, setStorageInfo] = useState(null);
+
+  useEffect(() => {
+    storageApi.getUsage().then(res => setStorageInfo(res.data)).catch(() => {});
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
