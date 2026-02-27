@@ -1,0 +1,188 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "Creative Designer",
+    "mission": "Create a 'Personal Life OS' that feels like a professional, high-density control center, not a generic SaaS.",
+    "principles": [
+      "Fusion over Imitation: Mix Fintech precision with Digital Garden organic growth.",
+      "Emotion First: The user should feel 'In Control' and 'Organized'.",
+      "Content is King: Data is the hero. UI recedes.",
+      "Density with Breathing Room: High information density (for power users) but with structured negative space.",
+      "Contrast: High contrast for readability in dark mode."
+    ]
+  },
+  "visual_system": {
+    "theme": "dark",
+    "colors": {
+      "palette_name": "Obsidian Control",
+      "base": {
+        "background": "#09090b",
+        "foreground": "#fafafa",
+        "card": "#121212",
+        "card_foreground": "#ffffff",
+        "popover": "#121212",
+        "popover_foreground": "#ffffff",
+        "primary": "#fafafa",
+        "primary_foreground": "#18181b",
+        "secondary": "#27272a",
+        "secondary_foreground": "#fafafa",
+        "muted": "#27272a",
+        "muted_foreground": "#a1a1aa",
+        "accent": "#27272a",
+        "accent_foreground": "#fafafa",
+        "destructive": "#7f1d1d",
+        "destructive_foreground": "#fafafa",
+        "border": "#27272a",
+        "input": "#27272a",
+        "ring": "#d4d4d8"
+      },
+      "semantic": {
+        "finance_up": "#10b981",
+        "finance_down": "#ef4444",
+        "crypto": "#f59e0b",
+        "inventory": "#3b82f6",
+        "projects": "#8b5cf6",
+        "personal": "#ec4899"
+      },
+      "gradients": {
+        "subtle_glow": "radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0) 70%)"
+      }
+    },
+    "typography": {
+      "headings": {
+        "family": "Chivo, sans-serif",
+        "weights": ["700", "900"],
+        "usage": "Page titles, Widget headers, Big metrics"
+      },
+      "body": {
+        "family": "Inter, sans-serif",
+        "weights": ["400", "500"],
+        "usage": "General text, form labels"
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "weights": ["400"],
+        "usage": "IDs, Financial figures, Code snippets, Tags"
+      }
+    },
+    "spacing": {
+      "base_scale": "4px",
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "grid_gap": "gap-4 md:gap-6",
+      "section_gap": "gap-8 md:gap-12"
+    },
+    "radius": {
+      "default": "rounded-md",
+      "card": "rounded-lg",
+      "button": "rounded-md"
+    },
+    "shadows": {
+      "card": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "hover": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+      "glow": "0 0 20px -5px rgba(255, 255, 255, 0.1)"
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "Grid Borders",
+      "description": "Flat background, 1px subtle border (border-border), no shadow by default. Hover lifts slightly.",
+      "classes": "bg-card border border-border hover:border-primary/20 transition-colors duration-200"
+    },
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      "ghost": "hover:bg-accent hover:text-accent-foreground",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+    },
+    "inputs": {
+      "style": "Minimalist",
+      "classes": "bg-background border-input focus:ring-1 focus:ring-primary"
+    },
+    "navigation": {
+      "type": "Sidebar",
+      "style": "Collapsible, dense, icon-heavy",
+      "classes": "border-r border-border bg-card/50 backdrop-blur-xl"
+    }
+  },
+  "layouts": {
+    "dashboard": {
+      "type": "Bento Grid (Mode B)",
+      "grid_cols": "grid-cols-1 md:grid-cols-4 lg:grid-cols-6",
+      "gap": "gap-4",
+      "widgets": [
+        {"name": "Overview", "span": "col-span-2 row-span-2"},
+        {"name": "QuickAdd", "span": "col-span-1 row-span-1"},
+        {"name": "FinanceSummary", "span": "col-span-2 row-span-1"},
+        {"name": "RecentItems", "span": "col-span-2 row-span-2"}
+      ]
+    },
+    "inventory": {
+      "type": "Hybrid (Table/Grid)",
+      "features": ["Filter Sidebar", "Sticky Header", "Multi-select"]
+    },
+    "detail_view": {
+      "type": "Split Screen",
+      "left_panel": "Main Info & Metadata (60%)",
+      "right_panel": "Relations, Files, History (40%)"
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "inventory_cover",
+        "url": "https://images.unsplash.com/photo-1765766638330-a180e8a5a990?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwaG9tZSUyMGludGVyaW9yJTIwZGFya3xlbnwwfHx8fDE3NzIxODA1NjF8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern dark living room for 'Home' or 'Inventory' section cover"
+      },
+      {
+        "category": "dashboard_abstract",
+        "url": "https://images.unsplash.com/photo-1759159347827-de3a54002de7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGRhcmslMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZCUyMGdlb21ldHJpY3xlbnwwfHx8fDE3NzIxODA1NjN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract cubes for 'Projects' or 'Database' visualization"
+      },
+      {
+        "category": "finance_bg",
+        "url": "https://images.unsplash.com/photo-1737505598998-693328b57ae3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZCUyMGdlb21ldHJpY3xlbnwwfHx8fDE3NzIxODA1NjN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Geometric black and white for 'Finance' section background"
+      },
+      {
+        "category": "login_bg",
+        "url": "https://images.unsplash.com/photo-1767642459780-1c2506f4654b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhcmslMjB0ZWNobm9sb2d5JTIwYmFja2dyb3VuZCUyMGdlb21ldHJpY3xlbnwwfHx8fDE3NzIxODA1NjN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Red geometric shapes for Auth page background"
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px (Thin/Elegant)"
+    }
+  },
+  "motion": {
+    "reduced_motion": "respect-preference",
+    "transitions": "transition-all duration-200 ease-in-out",
+    "hover_effects": "scale-[1.01] brightness-110",
+    "page_transition": "opacity-0 to opacity-100 duration-300"
+  },
+  "accessibility": {
+    "contrast": "WCAG AA compliant",
+    "focus_ring": "ring-2 ring-primary ring-offset-2 ring-offset-background",
+    "aria_labels": "Mandatory for all icon-only buttons"
+  },
+  "instructions_to_main_agent": [
+    "Use 'lucide-react' for all icons.",
+    "Implement a 'Sidebar' layout with a collapsible trigger.",
+    "Use 'Recharts' for all financial charts (Line, Pie, Bar).",
+    "Ensure all dates are formatted in French (DD/MM/YYYY).",
+    "Use 'Sonner' for toast notifications.",
+    "For the 'Matrix' view, use a custom grid layout with filtering.",
+    "Implement 'Lazy Loading' for images in the inventory to support NAS performance.",
+    "Use 'data-testid' on all interactive elements.",
+    "Do NOT use gradients for backgrounds, use solid colors or subtle noise textures.",
+    "Keep the interface in French as requested."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI slop' aesthetic (generic centered layouts).",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for overlays.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable in content pages, but keep dashboards dense.",
+    "Subtle grain textures and noise overlays are encouraged."
+  ]
+}
