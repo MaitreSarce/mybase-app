@@ -1001,6 +1001,107 @@ async def get_portfolio_assets(
     assets = await db.portfolio.find(query, {"_id": 0}).to_list(1000)
     return [PortfolioAssetResponse(**asset) for asset in assets]
 
+# --- Portfolio Transactions (MUST be before {asset_id} routes) ---
+
+class TransactionCreate(BaseModel):
+    asset_id: str
+    transaction_type: str
+    quantity: float
+    price_per_unit: float
+    date: Optional[str] = None
+    fees: Optional[float] = 0
+    notes: Optional[str] = None
+
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    asset_id: str
+    asset_name: Optional[str] = None
+    transaction_type: str
+    quantity: float
+    price_per_unit: float
+    total: float
+    fees: float = 0
+    date: str
+    notes: Optional[str] = None
+    created_at: str
+
+@api_router.post("/portfolio/transactions", response_model=TransactionResponse)
+async def create_transaction(data: TransactionCreate, user: dict = Depends(get_current_user)):
+    asset = await db.portfolio.find_one({"id": data.asset_id, "user_id": user["id"]}, {"_id": 0})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Actif non trouvé")
+    tx_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    total = data.quantity * data.price_per_unit
+    doc = {
+        "id": tx_id, "user_id": user["id"], "asset_id": data.asset_id,
+        "asset_name": asset.get("name", ""), "transaction_type": data.transaction_type,
+        "quantity": data.quantity, "price_per_unit": data.price_per_unit,
+        "total": total, "fees": data.fees or 0,
+        "date": data.date or now[:10], "notes": data.notes, "created_at": now
+    }
+    await db.portfolio_transactions.insert_one(doc)
+    doc.pop("_id", None)
+    if data.transaction_type == "buy":
+        await db.portfolio.update_one({"id": data.asset_id}, {"$inc": {"quantity": data.quantity}})
+    elif data.transaction_type == "sell":
+        await db.portfolio.update_one({"id": data.asset_id}, {"$inc": {"quantity": -data.quantity}})
+    return TransactionResponse(**doc)
+
+@api_router.get("/portfolio/transactions", response_model=List[TransactionResponse])
+async def get_transactions(user: dict = Depends(get_current_user), asset_id: Optional[str] = None):
+    query = {"user_id": user["id"]}
+    if asset_id:
+        query["asset_id"] = asset_id
+    txs = await db.portfolio_transactions.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return [TransactionResponse(**tx) for tx in txs]
+
+@api_router.delete("/portfolio/transactions/{tx_id}")
+async def delete_transaction(tx_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_transactions.delete_one({"id": tx_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Transaction non trouvée")
+    return {"message": "Transaction supprimée"}
+
+@api_router.post("/portfolio/snapshots")
+async def create_portfolio_snapshot(data: dict = None, user: dict = Depends(get_current_user)):
+    assets = await db.portfolio.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    total_value = 0
+    by_type = {}
+    for asset in assets:
+        current = (asset.get("current_price") or asset.get("purchase_price", 0)) * asset.get("quantity", 0)
+        total_value += current
+        at = asset.get("asset_type", "other")
+        by_type[at] = by_type.get(at, 0) + current
+    now = datetime.now(timezone.utc)
+    snap_id = str(uuid.uuid4())
+    doc = {
+        "id": snap_id, "user_id": user["id"], "date": now.strftime("%Y-%m-%d"),
+        "month": now.strftime("%Y-%m"), "total_value": total_value,
+        "by_type": by_type, "asset_count": len(assets), "created_at": now.isoformat()
+    }
+    await db.portfolio_snapshots.update_one(
+        {"user_id": user["id"], "date": doc["date"]}, {"$set": doc}, upsert=True
+    )
+    return {"message": "Snapshot créé", "total_value": total_value}
+
+@api_router.get("/portfolio/snapshots")
+async def get_portfolio_snapshots(user: dict = Depends(get_current_user), months: int = 12):
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+    snapshots = await db.portfolio_snapshots.find(
+        {"user_id": user["id"], "date": {"$gte": cutoff}}, {"_id": 0}
+    ).sort("date", 1).to_list(1000)
+    return snapshots
+
+@api_router.get("/portfolio/refresh-prices")
+async def refresh_prices_get(user: dict = Depends(get_current_user)):
+    """Redirect GET to POST for convenience"""
+    raise HTTPException(status_code=405, detail="Use POST method")
+
+# --- End of portfolio sub-routes ---
+
 @api_router.get("/portfolio/{asset_id}", response_model=PortfolioAssetResponse)
 async def get_portfolio_asset(asset_id: str, user: dict = Depends(get_current_user)):
     asset = await db.portfolio.find_one({"id": asset_id, "user_id": user["id"]}, {"_id": 0})
