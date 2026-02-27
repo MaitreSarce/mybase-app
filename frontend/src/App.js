@@ -11,6 +11,8 @@ import ProjectsPage from "./pages/ProjectsPage";
 import ContentPage from "./pages/ContentPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import AlertsPage from "./pages/AlertsPage";
+import TagsPage from "./pages/TagsPage";
+import MindmapPage from "./pages/MindmapPage";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -77,6 +79,8 @@ function App() {
             <Route path="content" element={<ContentPage />} />
             <Route path="portfolio" element={<PortfolioPage />} />
             <Route path="alerts" element={<AlertsPage />} />
+            <Route path="tags" element={<TagsPage />} />
+            <Route path="mindmap" element={<MindmapPage />} />
           </Route>
         </Routes>
         <Toaster richColors position="bottom-right" />

@@ -16,7 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  Bell
+  Bell,
+  Hash,
+  Network
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -41,6 +43,8 @@ const navItems = [
   { path: '/content', label: 'Contenu', icon: BookOpen },
   { path: '/portfolio', label: 'Portefeuille', icon: TrendingUp },
   { path: '/alerts', label: 'Alertes', icon: Bell },
+  { path: '/tags', label: 'Tags', icon: Hash },
+  { path: '/mindmap', label: 'Carte Mentale', icon: Network },
 ];
 
 const Layout = () => {
