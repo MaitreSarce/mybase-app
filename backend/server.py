@@ -1764,7 +1764,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     enriched_links = []
     for link in links:
         linked_col = collection_map.get(link.get("item_type"))
-        if linked_col:
+        if linked_col is not None:
             linked_item = await linked_col.find_one(
                 {"id": link["item_id"], "user_id": user_id},
                 {"_id": 0, "name": 1, "title": 1, "description": 1, "id": 1}
