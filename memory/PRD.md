@@ -7,78 +7,54 @@ Une application de type "super app" personnelle combinant ERP, base de données,
 27 Février 2026
 
 ## User Persona
-- Utilisateur unique
-- Power user cherchant à centraliser toute sa vie dans une seule application
-- Déploiement prévu sur Raspberry Pi 8GB + NAS
+- Utilisateur unique, power user
+- Déploiement sur Raspberry Pi 8GB + NAS
 
-## Fonctionnalités Principales (Implémentées)
+## Fonctionnalités Implémentées
 
 ### Phase 1 - MVP
-- [x] Authentification (JWT, inscription, connexion)
+- [x] Authentification JWT, inscription, connexion
 - [x] Collections avec couleurs, catégories, schéma de métadonnées
-- [x] Inventaire avec tags, métadonnées flexibles, prix, condition, emplacement
+- [x] Inventaire avec tags, métadonnées flexibles, prix, condition
 - [x] Liste de souhaits avec prix, priorité, URL, date cible
 - [x] Projets & Tâches avec couleurs, progression, priorité
-- [x] Bibliothèque de contenu (recettes, DIY, tutoriels, éducatif)
+- [x] Bibliothèque de contenu (recettes, DIY, tutoriels)
 - [x] Portefeuille financier (crypto, actions, immobilier)
-- [x] Dashboard avec statistiques globales et widgets
+- [x] Dashboard avec statistiques globales
 - [x] Interface 100% français, dark mode, sidebar collapsible
 
 ### Phase 2 - Intégrations
 - [x] Prix crypto en temps réel (CoinGecko)
-- [x] Alertes de prix (3 types: cible, hausse, baisse)
+- [x] Alertes de prix (cible, hausse, baisse)
 - [x] Liens bidirectionnels entre items
 - [x] Upload de fichiers (images et documents)
 
 ### Phase 3 - Fonctionnalités avancées (27 Fév 2026)
-- [x] **D: Sous-projets** - Hiérarchie parent/enfant pour les projets avec parent_id
-- [x] **D: Types personnalisés** - CRUD pour types custom avec champs définis par l'utilisateur
-- [x] **B: Gestion des Tags** - Page dédiée avec CRUD, couleurs, catégories, compteur d'utilisation
-- [x] **B: Filtres** - Filtres par catégorie sur la page Tags
-- [x] **C: Médias étendus** - Upload de fichiers étendu aux projets et tâches
-- [x] **A: Carte Mentale** - Vue graphe interactive avec @xyflow/react, filtrable par type/tag
-- [x] **G (partiel): Suppression icône** - Champ icône inutile retiré des collections
+- [x] **D: Sous-projets** — Hiérarchie parent/enfant
+- [x] **D: Types personnalisés** — CRUD types custom avec champs définis
+- [x] **B: Gestion des Tags** — Page /tags avec CRUD, couleurs, catégories, compteur
+- [x] **C: Médias étendus** — Upload fichiers pour projets et tâches
+- [x] **A: Carte Mentale** — Vue graphe interactive /mindmap (@xyflow/react)
+- [x] **G: Suppression icône** — Champ icône retiré des collections
+- [x] **G: Stockage** — Affichage espace de stockage dans la sidebar
+- [x] **E: Portfolio Avancé** — Snapshots mensuels, graphique évolution, historique transactions (achats/ventes), onglets (Actifs, Graphiques, Évolution, Transactions), filtre par type d'actif
 
 ## Architecture technique
-
-### Backend (FastAPI)
-- MongoDB (FerretDB + PostgreSQL sur Raspberry Pi)
-- JWT pour l'authentification
-- Upload de fichiers local
-- API RESTful avec préfixe /api
-- Intégration CoinGecko (httpx)
-
-### Frontend (React)
-- Shadcn/UI components
-- Recharts pour les graphiques
-- @xyflow/react pour la carte mentale
-- TailwindCSS
-- React Router
-
-### Base de données
-Collections: users, collections, inventory, wishlist, projects, tasks, content, portfolio, alerts, custom_types, managed_tags
+- **Backend**: FastAPI, MongoDB (FerretDB+PostgreSQL sur RPi)
+- **Frontend**: React, Shadcn/UI, TailwindCSS, Recharts, @xyflow/react
+- **DB Collections**: users, collections, inventory, wishlist, projects, tasks, content, portfolio, alerts, custom_types, managed_tags, portfolio_transactions, portfolio_snapshots
 
 ## Backlog
 
-### P1 - Prochaines tâches
-- [ ] **G: Corrections mineures** - Afficher l'espace de stockage restant
-- [ ] **E: Portfolio Avancé** - Snapshots mensuels, filtre par type d'actif, historique transactions
-- [ ] **F: Alertes améliorées** - Comparateur de prix multi-sites
+### P0 - Prochaine tâche
+- [ ] **F: Alertes améliorées** — Comparateur de prix multi-sites
 
-### P2 - Moyenne priorité
+### P1
 - [ ] Intégration Alpha Vantage API (prix actions) - nécessite clé API
 - [ ] Import/Export de données
-- [ ] Génération de listes de courses depuis recettes
-- [ ] Tracking d'annonces (collections)
-- [ ] Suivi immobilier détaillé
+- [ ] Refactoring backend (découper server.py en modules)
 
-### P3 - Nice to have
+### P2
 - [ ] Notifications email des alertes
 - [ ] Mode hors ligne
-- [ ] Synchronisation multi-devices
 - [ ] Thèmes personnalisables
-
-## Notes techniques
-- CoinGecko tier gratuit : 10-15 appels/minute
-- Déploiement: Raspberry Pi avec FerretDB + PostgreSQL (Docker), Nginx reverse proxy, systemd
-- Le stockage de fichiers est en local, compatible NAS
