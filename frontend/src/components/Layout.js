@@ -40,6 +40,7 @@ const navItems = [
   { path: '/projects', label: 'Projets', icon: FolderKanban },
   { path: '/content', label: 'Contenu', icon: BookOpen },
   { path: '/portfolio', label: 'Portefeuille', icon: TrendingUp },
+  { path: '/alerts', label: 'Alertes', icon: Bell },
 ];
 
 const Layout = () => {
