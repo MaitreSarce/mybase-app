@@ -143,3 +143,24 @@ export const linksApi = {
     api.delete('/links', { params: { source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId } }),
   getForItem: (itemType, itemId) => api.get(`/links/${itemType}/${itemId}`),
 };
+
+// Custom Types API
+export const customTypesApi = {
+  getAll: (category) => api.get('/custom-types', { params: { category } }),
+  create: (data) => api.post('/custom-types', data),
+  update: (id, data) => api.put(`/custom-types/${id}`, data),
+  delete: (id) => api.delete(`/custom-types/${id}`),
+};
+
+// Managed Tags API
+export const managedTagsApi = {
+  getAll: () => api.get('/tags/manage'),
+  create: (data) => api.post('/tags/manage', data),
+  update: (id, data) => api.put(`/tags/manage/${id}`, data),
+  delete: (id) => api.delete(`/tags/manage/${id}`),
+};
+
+// Mindmap API
+export const mindmapApi = {
+  getData: (perspective) => api.get('/mindmap', { params: { perspective } }),
+};
