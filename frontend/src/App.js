@@ -76,6 +76,7 @@ function App() {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="content" element={<ContentPage />} />
             <Route path="portfolio" element={<PortfolioPage />} />
+            <Route path="alerts" element={<AlertsPage />} />
           </Route>
         </Routes>
         <Toaster richColors position="bottom-right" />
