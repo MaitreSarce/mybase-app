@@ -450,6 +450,7 @@ const PortfolioPage = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Summary Cards */}
