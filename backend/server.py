@@ -704,6 +704,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
         "description": data.description,
         "color": data.color,
         "icon": data.icon,
+        "parent_id": data.parent_id,
         "status": "active",
         "tags": data.tags,
         "links": [l.model_dump() for l in data.links],
