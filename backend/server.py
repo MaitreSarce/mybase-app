@@ -1554,7 +1554,7 @@ async def check_alerts(user: dict = Depends(get_current_user)):
     
     for alert in alerts:
         collection = collection_map.get(alert["item_type"])
-        if not collection:
+        if collection is None:
             continue
         
         item = await collection.find_one({"id": alert["item_id"]}, {"_id": 0})
