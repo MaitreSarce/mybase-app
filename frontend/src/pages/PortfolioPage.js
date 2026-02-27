@@ -96,6 +96,19 @@ const PortfolioPage = () => {
     }
   };
 
+  const handleRefreshPrices = async () => {
+    setRefreshing(true);
+    try {
+      const response = await cryptoApi.refreshPortfolioPrices();
+      toast.success(response.data.message || 'Prix mis à jour');
+      fetchAssets();
+    } catch (error) {
+      toast.error('Erreur lors de la mise à jour des prix');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleOpenDialog = (asset = null) => {
     if (asset) {
       setEditingAsset(asset);
