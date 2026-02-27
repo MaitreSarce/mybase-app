@@ -256,6 +256,7 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     icon: Optional[str] = None
+    parent_id: Optional[str] = None
     tags: List[str] = []
     links: List[ItemLink] = []
 
@@ -264,6 +265,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     icon: Optional[str] = None
+    parent_id: Optional[str] = None
     status: Optional[str] = None
     tags: Optional[List[str]] = None
     links: Optional[List[ItemLink]] = None
@@ -276,6 +278,7 @@ class ProjectResponse(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     icon: Optional[str] = None
+    parent_id: Optional[str] = None
     status: str = "active"
     tags: List[str] = []
     links: List[Dict[str, Any]] = []
