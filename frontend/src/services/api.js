@@ -120,3 +120,26 @@ export const uploadApi = {
   },
   delete: (itemType, itemId, fileId) => api.delete(`/upload/${itemType}/${itemId}/${fileId}`),
 };
+
+// Crypto Prices API
+export const cryptoApi = {
+  getPrices: (symbols) => api.get('/crypto/prices', { params: { symbols } }),
+  search: (query) => api.get('/crypto/search', { params: { query } }),
+  refreshPortfolioPrices: () => api.post('/portfolio/refresh-prices'),
+};
+
+// Alerts API
+export const alertsApi = {
+  getAll: (triggered) => api.get('/alerts', { params: { triggered } }),
+  create: (data) => api.post('/alerts', data),
+  delete: (id) => api.delete(`/alerts/${id}`),
+  check: () => api.post('/alerts/check'),
+};
+
+// Links API
+export const linksApi = {
+  create: (data) => api.post('/links', data),
+  delete: (sourceType, sourceId, targetType, targetId) => 
+    api.delete('/links', { params: { source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId } }),
+  getForItem: (itemType, itemId) => api.get(`/links/${itemType}/${itemId}`),
+};
