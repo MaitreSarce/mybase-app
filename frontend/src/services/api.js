@@ -164,3 +164,21 @@ export const managedTagsApi = {
 export const mindmapApi = {
   getData: (perspective) => api.get('/mindmap', { params: { perspective } }),
 };
+
+// Storage API
+export const storageApi = {
+  getUsage: () => api.get('/storage/usage'),
+};
+
+// Portfolio Transactions API
+export const transactionsApi = {
+  getAll: (assetId) => api.get('/portfolio/transactions', { params: { asset_id: assetId } }),
+  create: (data) => api.post('/portfolio/transactions', data),
+  delete: (id) => api.delete(`/portfolio/transactions/${id}`),
+};
+
+// Portfolio Snapshots API
+export const snapshotsApi = {
+  getAll: (months) => api.get('/portfolio/snapshots', { params: { months } }),
+  create: () => api.post('/portfolio/snapshots'),
+};
