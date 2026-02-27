@@ -1781,6 +1781,9 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     
     return enriched_links
 
+# Include the router in the main app (again for new routes)
+app.include_router(api_router)
+
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
