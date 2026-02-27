@@ -43,17 +43,19 @@ const TYPE_COLORS = {
 
 const CustomNode = ({ data }) => (
   <div
-    className="px-4 py-2 rounded-lg border-2 shadow-lg min-w-[120px] max-w-[200px] text-center"
+    className="px-4 py-2 rounded-lg border-2 shadow-lg min-w-[120px] max-w-[200px] text-center relative"
     style={{
       backgroundColor: 'hsl(240 6% 10%)',
       borderColor: data.color,
       color: '#fafafa',
     }}
   >
+    <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
     <div className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5" style={{ color: data.color }}>
       {TYPE_LABELS[data.itemType] || data.itemType}
     </div>
     <div className="text-sm font-medium truncate">{data.label}</div>
+    <Handle type="source" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
   </div>
 );
 
