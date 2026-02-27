@@ -1784,6 +1784,268 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     
     return enriched_links
 
+# ==================== CUSTOM TYPES ====================
+
+class CustomTypeCreate(BaseModel):
+    name: str
+    category: str  # collection, content
+    fields: List[Dict[str, Any]] = []  # [{name, type, required, options}]
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+class CustomTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    fields: Optional[List[Dict[str, Any]]] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+class CustomTypeResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    name: str
+    category: str
+    fields: List[Dict[str, Any]] = []
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    created_at: str
+
+@api_router.post("/custom-types", response_model=CustomTypeResponse)
+async def create_custom_type(data: CustomTypeCreate, user: dict = Depends(get_current_user)):
+    type_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": type_id,
+        "user_id": user["id"],
+        **data.model_dump(),
+        "created_at": now
+    }
+    await db.custom_types.insert_one(doc)
+    doc.pop("_id", None)
+    return CustomTypeResponse(**doc)
+
+@api_router.get("/custom-types", response_model=List[CustomTypeResponse])
+async def get_custom_types(user: dict = Depends(get_current_user), category: Optional[str] = None):
+    query = {"user_id": user["id"]}
+    if category:
+        query["category"] = category
+    types = await db.custom_types.find(query, {"_id": 0}).to_list(100)
+    return [CustomTypeResponse(**t) for t in types]
+
+@api_router.put("/custom-types/{type_id}", response_model=CustomTypeResponse)
+async def update_custom_type(type_id: str, data: CustomTypeUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    result = await db.custom_types.find_one_and_update(
+        {"id": type_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Type personnalisé non trouvé")
+    result.pop("_id", None)
+    return CustomTypeResponse(**result)
+
+@api_router.delete("/custom-types/{type_id}")
+async def delete_custom_type(type_id: str, user: dict = Depends(get_current_user)):
+    result = await db.custom_types.delete_one({"id": type_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Type personnalisé non trouvé")
+    return {"message": "Type supprimé"}
+
+# ==================== TAGS MANAGEMENT ====================
+
+class TagManageCreate(BaseModel):
+    name: str
+    color: Optional[str] = None
+    category: Optional[str] = None
+
+class TagManageResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    name: str
+    color: Optional[str] = None
+    category: Optional[str] = None
+    usage_count: int = 0
+    created_at: str
+
+@api_router.post("/tags/manage", response_model=TagManageResponse)
+async def create_managed_tag(data: TagManageCreate, user: dict = Depends(get_current_user)):
+    existing = await db.managed_tags.find_one({"user_id": user["id"], "name": data.name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Ce tag existe déjà")
+    tag_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": tag_id,
+        "user_id": user["id"],
+        "name": data.name,
+        "color": data.color,
+        "category": data.category,
+        "usage_count": 0,
+        "created_at": now
+    }
+    await db.managed_tags.insert_one(doc)
+    doc.pop("_id", None)
+    return TagManageResponse(**doc)
+
+@api_router.get("/tags/manage", response_model=List[TagManageResponse])
+async def get_managed_tags(user: dict = Depends(get_current_user)):
+    tags = await db.managed_tags.find({"user_id": user["id"]}, {"_id": 0}).sort("name", 1).to_list(500)
+    # Calculate usage counts
+    user_id = user["id"]
+    for tag in tags:
+        count = 0
+        for col in [db.inventory, db.wishlist, db.content, db.portfolio, db.tasks, db.projects]:
+            count += await col.count_documents({"user_id": user_id, "tags": tag["name"]})
+        tag["usage_count"] = count
+    return [TagManageResponse(**t) for t in tags]
+
+@api_router.put("/tags/manage/{tag_id}", response_model=TagManageResponse)
+async def update_managed_tag(tag_id: str, data: TagManageCreate, user: dict = Depends(get_current_user)):
+    old_tag = await db.managed_tags.find_one({"id": tag_id, "user_id": user["id"]})
+    if not old_tag:
+        raise HTTPException(status_code=404, detail="Tag non trouvé")
+    old_name = old_tag["name"]
+    new_name = data.name
+    update_data = {"name": data.name, "color": data.color, "category": data.category}
+    result = await db.managed_tags.find_one_and_update(
+        {"id": tag_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True
+    )
+    # Rename tag in all items if name changed
+    if old_name != new_name:
+        user_id = user["id"]
+        for col in [db.inventory, db.wishlist, db.content, db.portfolio, db.tasks, db.projects]:
+            await col.update_many(
+                {"user_id": user_id, "tags": old_name},
+                {"$set": {"tags.$[elem]": new_name}},
+                array_filters=[{"elem": old_name}]
+            )
+    result.pop("_id", None)
+    result["usage_count"] = 0
+    return TagManageResponse(**result)
+
+@api_router.delete("/tags/manage/{tag_id}")
+async def delete_managed_tag(tag_id: str, user: dict = Depends(get_current_user)):
+    tag = await db.managed_tags.find_one({"id": tag_id, "user_id": user["id"]})
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag non trouvé")
+    tag_name = tag["name"]
+    await db.managed_tags.delete_one({"id": tag_id})
+    # Remove tag from all items
+    user_id = user["id"]
+    for col in [db.inventory, db.wishlist, db.content, db.portfolio, db.tasks, db.projects]:
+        await col.update_many(
+            {"user_id": user_id, "tags": tag_name},
+            {"$pull": {"tags": tag_name}}
+        )
+    return {"message": "Tag supprimé"}
+
+# ==================== MINDMAP DATA ====================
+
+@api_router.get("/mindmap")
+async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: Optional[str] = None):
+    """Get all items with their links for mindmap visualization"""
+    user_id = user["id"]
+    nodes = []
+    edges = []
+    
+    # Fetch all item types
+    collections_list = await db.collections.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    inventory_list = await db.inventory.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    wishlist_list = await db.wishlist.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    projects_list = await db.projects.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    tasks_list = await db.tasks.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    content_list = await db.content.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    portfolio_list = await db.portfolio.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    
+    type_config = {
+        "collection": {"color": "#3b82f6", "items": collections_list},
+        "inventory": {"color": "#8b5cf6", "items": inventory_list},
+        "wishlist": {"color": "#ec4899", "items": wishlist_list},
+        "project": {"color": "#f59e0b", "items": projects_list},
+        "task": {"color": "#10b981", "items": tasks_list},
+        "content": {"color": "#06b6d4", "items": content_list},
+        "portfolio": {"color": "#f97316", "items": portfolio_list},
+    }
+    
+    seen_edges = set()
+    
+    for item_type, config in type_config.items():
+        for item in config["items"]:
+            name = item.get("name") or item.get("title", "Sans nom")
+            tags = item.get("tags", [])
+            
+            nodes.append({
+                "id": item["id"],
+                "type": item_type,
+                "name": name,
+                "color": config["color"],
+                "tags": tags,
+            })
+            
+            # Add link edges
+            for link in item.get("links", []):
+                target_id = link.get("item_id")
+                if target_id:
+                    edge_key = tuple(sorted([item["id"], target_id]))
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        edges.append({
+                            "source": item["id"],
+                            "target": target_id,
+                            "label": link.get("label", ""),
+                        })
+            
+            # Add collection membership edges
+            if item_type == "inventory" and item.get("collection_id"):
+                edge_key = tuple(sorted([item["id"], item["collection_id"]]))
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges.append({
+                        "source": item["id"],
+                        "target": item["collection_id"],
+                        "label": "dans",
+                    })
+            
+            # Add project-task edges
+            if item_type == "task" and item.get("project_id"):
+                edge_key = tuple(sorted([item["id"], item["project_id"]]))
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges.append({
+                        "source": item["project_id"],
+                        "target": item["id"],
+                        "label": "tâche",
+                    })
+            
+            # Add sub-project edges
+            if item_type == "project" and item.get("parent_id"):
+                edge_key = tuple(sorted([item["id"], item["parent_id"]]))
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges.append({
+                        "source": item["parent_id"],
+                        "target": item["id"],
+                        "label": "sous-projet",
+                    })
+    
+    # Filter by perspective (tag or type)
+    if perspective and perspective.startswith("tag:"):
+        tag_name = perspective[4:]
+        node_ids = {n["id"] for n in nodes if tag_name in n.get("tags", [])}
+        nodes = [n for n in nodes if n["id"] in node_ids]
+        edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
+    elif perspective and perspective.startswith("type:"):
+        type_name = perspective[5:]
+        node_ids = {n["id"] for n in nodes if n["type"] == type_name}
+        nodes = [n for n in nodes if n["id"] in node_ids]
+        edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
+    
+    return {"nodes": nodes, "edges": edges}
+
 # Include the router in the main app (again for new routes)
 app.include_router(api_router)
 
