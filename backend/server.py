@@ -2147,6 +2147,43 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
     
     return {"nodes": nodes, "edges": edges}
 
+# ==================== STORAGE USAGE ====================
+
+@api_router.get("/storage/usage")
+async def get_storage_usage(user: dict = Depends(get_current_user)):
+    total_size = 0
+    file_count = 0
+    user_id = user["id"]
+    for col_name in ["inventory", "wishlist", "content", "portfolio", "projects", "tasks"]:
+        col = getattr(db, col_name)
+        items_with_files = await col.find(
+            {"user_id": user_id, "files": {"$exists": True, "$ne": []}},
+            {"_id": 0, "files": 1}
+        ).to_list(10000)
+        for item in items_with_files:
+            for f in item.get("files", []):
+                file_count += 1
+                filepath = f.get("path", "")
+                if filepath:
+                    full_path = ROOT_DIR / filepath.lstrip("/")
+                    if full_path.exists():
+                        total_size += full_path.stat().st_size
+    disk_total = 0
+    disk_count = 0
+    if UPLOAD_DIR.exists():
+        for f in UPLOAD_DIR.rglob("*"):
+            if f.is_file():
+                disk_total += f.stat().st_size
+                disk_count += 1
+    return {
+        "user_file_count": file_count,
+        "user_size_bytes": total_size,
+        "user_size_mb": round(total_size / (1024 * 1024), 2),
+        "total_disk_bytes": disk_total,
+        "total_disk_mb": round(disk_total / (1024 * 1024), 2),
+        "total_disk_files": disk_count
+    }
+
 # Include the router in the main app (again for new routes)
 app.include_router(api_router)
 
