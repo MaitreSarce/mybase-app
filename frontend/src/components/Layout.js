@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { storageApi } from '../services/api';
 import { 
   LayoutDashboard, 
   Layers, 
@@ -18,7 +19,8 @@ import {
   User,
   Bell,
   Hash,
-  Network
+  Network,
+  HardDrive
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
