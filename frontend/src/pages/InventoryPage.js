@@ -1,0 +1,522 @@
+import { useState, useEffect } from 'react';
+import { inventoryApi, collectionsApi } from '../services/api';
+import { toast } from 'sonner';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/badge';
+import { Skeleton } from '../components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { 
+  Plus, 
+  MoreVertical, 
+  Pencil, 
+  Trash2, 
+  Package, 
+  Loader2,
+  Search,
+  Tag,
+  X
+} from 'lucide-react';
+
+const InventoryPage = () => {
+  const [items, setItems] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCollection, setFilterCollection] = useState('all');
+  const [newTag, setNewTag] = useState('');
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    collection_id: '',
+    tags: [],
+    metadata: [],
+    purchase_price: '',
+    current_value: '',
+    purchase_date: '',
+    location: '',
+    condition: '',
+    quantity: 1
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [itemsRes, collectionsRes] = await Promise.all([
+        inventoryApi.getAll(),
+        collectionsApi.getAll()
+      ]);
+      setItems(itemsRes.data);
+      setCollections(collectionsRes.data);
+    } catch (error) {
+      toast.error('Erreur lors du chargement');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenDialog = (item = null) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({
+        name: item.name,
+        description: item.description || '',
+        collection_id: item.collection_id || '',
+        tags: item.tags || [],
+        metadata: item.metadata || [],
+        purchase_price: item.purchase_price || '',
+        current_value: item.current_value || '',
+        purchase_date: item.purchase_date || '',
+        location: item.location || '',
+        condition: item.condition || '',
+        quantity: item.quantity || 1
+      });
+    } else {
+      setEditingItem(null);
+      setFormData({
+        name: '',
+        description: '',
+        collection_id: '',
+        tags: [],
+        metadata: [],
+        purchase_price: '',
+        current_value: '',
+        purchase_date: '',
+        location: '',
+        condition: '',
+        quantity: 1
+      });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    const data = {
+      ...formData,
+      purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : null,
+      current_value: formData.current_value ? parseFloat(formData.current_value) : null,
+      collection_id: formData.collection_id || null,
+      quantity: parseInt(formData.quantity) || 1
+    };
+    
+    try {
+      if (editingItem) {
+        await inventoryApi.update(editingItem.id, data);
+        toast.success('Item mis à jour');
+      } else {
+        await inventoryApi.create(data);
+        toast.success('Item créé');
+      }
+      setDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (item) => {
+    if (!window.confirm(`Supprimer "${item.name}" ?`)) return;
+    
+    try {
+      await inventoryApi.delete(item.id);
+      toast.success('Item supprimé');
+      fetchData();
+    } catch (error) {
+      toast.error('Erreur lors de la suppression');
+    }
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    setFormData({ ...formData, tags: formData.tags.filter(t => t !== tagToRemove) });
+  };
+
+  const formatCurrency = (value) => {
+    if (!value) return '-';
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(value);
+  };
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch = !searchQuery || 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCollection = filterCollection === 'all' || item.collection_id === filterCollection;
+    return matchesSearch && matchesCollection;
+  });
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="bg-card border-border">
+              <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+              <CardContent><Skeleton className="h-4 w-full" /></CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="inventory-page">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Inventaire</h1>
+          <p className="text-muted-foreground mt-1">Gérez tous vos biens et possessions</p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => handleOpenDialog()} data-testid="add-item-btn">
+              <Plus className="h-4 w-4 mr-2" />
+              Nouvel item
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmit}>
+              <DialogHeader>
+                <DialogTitle>{editingItem ? 'Modifier l\'item' : 'Nouvel item'}</DialogTitle>
+                <DialogDescription>
+                  Ajoutez un item à votre inventaire avec ses détails
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="name">Nom *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Ex: Rolex Submariner"
+                      required
+                      data-testid="item-name-input"
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Description détaillée..."
+                      data-testid="item-description-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Collection</Label>
+                    <Select
+                      value={formData.collection_id}
+                      onValueChange={(value) => setFormData({ ...formData, collection_id: value })}
+                    >
+                      <SelectTrigger data-testid="item-collection-select">
+                        <SelectValue placeholder="Sélectionner..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Aucune</SelectItem>
+                        {collections.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">Quantité</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                      data-testid="item-quantity-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="purchase_price">Prix d'achat (€)</Label>
+                    <Input
+                      id="purchase_price"
+                      type="number"
+                      step="0.01"
+                      value={formData.purchase_price}
+                      onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                      placeholder="0.00"
+                      data-testid="item-purchase-price-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="current_value">Valeur actuelle (€)</Label>
+                    <Input
+                      id="current_value"
+                      type="number"
+                      step="0.01"
+                      value={formData.current_value}
+                      onChange={(e) => setFormData({ ...formData, current_value: e.target.value })}
+                      placeholder="0.00"
+                      data-testid="item-current-value-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="purchase_date">Date d'achat</Label>
+                    <Input
+                      id="purchase_date"
+                      type="date"
+                      value={formData.purchase_date}
+                      onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
+                      data-testid="item-purchase-date-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="condition">État</Label>
+                    <Select
+                      value={formData.condition}
+                      onValueChange={(value) => setFormData({ ...formData, condition: value })}
+                    >
+                      <SelectTrigger data-testid="item-condition-select">
+                        <SelectValue placeholder="Sélectionner..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="neuf">Neuf</SelectItem>
+                        <SelectItem value="excellent">Excellent</SelectItem>
+                        <SelectItem value="bon">Bon</SelectItem>
+                        <SelectItem value="correct">Correct</SelectItem>
+                        <SelectItem value="usage">Usagé</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="location">Emplacement</Label>
+                    <Input
+                      id="location"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      placeholder="Ex: Coffre-fort, Garage..."
+                      data-testid="item-location-input"
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Tags</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                        placeholder="Ajouter un tag..."
+                        data-testid="item-tag-input"
+                      />
+                      <Button type="button" variant="secondary" onClick={addTag}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {formData.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="gap-1">
+                            {tag}
+                            <X 
+                              className="h-3 w-3 cursor-pointer" 
+                              onClick={() => removeTag(tag)}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={saving} data-testid="item-submit-btn">
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {editingItem ? 'Mettre à jour' : 'Créer'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Rechercher un item..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="inventory-search-input"
+          />
+        </div>
+        <Select value={filterCollection} onValueChange={setFilterCollection}>
+          <SelectTrigger className="w-[200px]" data-testid="inventory-filter-collection">
+            <SelectValue placeholder="Toutes les collections" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les collections</SelectItem>
+            {collections.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Items Grid */}
+      {filteredItems.length === 0 ? (
+        <Card className="bg-card border-border border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Package className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Aucun item</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {searchQuery || filterCollection !== 'all' 
+                ? 'Aucun résultat pour ces critères' 
+                : 'Ajoutez votre premier item à l\'inventaire'}
+            </p>
+            {!searchQuery && filterCollection === 'all' && (
+              <Button onClick={() => handleOpenDialog()} data-testid="empty-add-item-btn">
+                <Plus className="h-4 w-4 mr-2" />
+                Ajouter un item
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredItems.map((item) => (
+            <Card
+              key={item.id}
+              className="bg-card border-border card-hover group"
+              data-testid={`inventory-card-${item.id}`}
+            >
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-lg truncate">{item.name}</CardTitle>
+                  {item.quantity > 1 && (
+                    <Badge variant="outline" className="mt-1 font-mono">
+                      x{item.quantity}
+                    </Badge>
+                  )}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      data-testid={`item-menu-${item.id}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleOpenDialog(item)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Modifier
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleDelete(item)}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Supprimer
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </CardHeader>
+              <CardContent>
+                {item.description && (
+                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                    {item.description}
+                  </p>
+                )}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Valeur</span>
+                    <span className="font-mono font-medium">
+                      {formatCurrency(item.current_value || item.purchase_price)}
+                    </span>
+                  </div>
+                  {item.condition && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">État</span>
+                      <Badge variant="outline" className="capitalize">{item.condition}</Badge>
+                    </div>
+                  )}
+                </div>
+                {item.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {item.tags.slice(0, 3).map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">
+                        <Tag className="h-3 w-3 mr-1" />
+                        {tag}
+                      </Badge>
+                    ))}
+                    {item.tags.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{item.tags.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default InventoryPage;
