@@ -1285,6 +1285,502 @@ async def global_search(
 # Include the router in the main app
 app.include_router(api_router)
 
+# ==================== COINGECKO CRYPTO PRICES ====================
+
+COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
+
+# Common crypto symbols mapping to CoinGecko IDs
+CRYPTO_SYMBOL_MAP = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "BNB": "binancecoin",
+    "XRP": "ripple",
+    "ADA": "cardano",
+    "DOGE": "dogecoin",
+    "SOL": "solana",
+    "DOT": "polkadot",
+    "MATIC": "matic-network",
+    "LTC": "litecoin",
+    "AVAX": "avalanche-2",
+    "LINK": "chainlink",
+    "UNI": "uniswap",
+    "ATOM": "cosmos",
+    "XLM": "stellar",
+}
+
+@api_router.get("/crypto/prices")
+async def get_crypto_prices(symbols: str = Query(..., description="Comma-separated symbols like BTC,ETH")):
+    """Get current prices for cryptocurrencies from CoinGecko (free tier)"""
+    symbol_list = [s.strip().upper() for s in symbols.split(",")]
+    
+    # Convert symbols to CoinGecko IDs
+    coin_ids = []
+    symbol_to_id = {}
+    for symbol in symbol_list:
+        coin_id = CRYPTO_SYMBOL_MAP.get(symbol, symbol.lower())
+        coin_ids.append(coin_id)
+        symbol_to_id[coin_id] = symbol
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{COINGECKO_BASE_URL}/simple/price",
+                params={
+                    "ids": ",".join(coin_ids),
+                    "vs_currencies": "eur,usd",
+                    "include_24hr_change": "true",
+                    "include_market_cap": "true"
+                },
+                timeout=10.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Format response with original symbols
+            result = {}
+            for coin_id, prices in data.items():
+                symbol = symbol_to_id.get(coin_id, coin_id.upper())
+                result[symbol] = {
+                    "price_eur": prices.get("eur"),
+                    "price_usd": prices.get("usd"),
+                    "change_24h": prices.get("eur_24h_change"),
+                    "market_cap_eur": prices.get("eur_market_cap")
+                }
+            
+            return result
+    except httpx.HTTPError as e:
+        logger.error(f"CoinGecko API error: {e}")
+        raise HTTPException(status_code=503, detail="Service de prix temporairement indisponible")
+
+@api_router.get("/crypto/search")
+async def search_crypto(query: str = Query(..., min_length=1)):
+    """Search for cryptocurrencies on CoinGecko"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{COINGECKO_BASE_URL}/search",
+                params={"query": query},
+                timeout=10.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Return top 10 coins
+            coins = data.get("coins", [])[:10]
+            return [
+                {
+                    "id": c["id"],
+                    "symbol": c["symbol"].upper(),
+                    "name": c["name"],
+                    "market_cap_rank": c.get("market_cap_rank")
+                }
+                for c in coins
+            ]
+    except httpx.HTTPError as e:
+        logger.error(f"CoinGecko search error: {e}")
+        raise HTTPException(status_code=503, detail="Recherche temporairement indisponible")
+
+@api_router.post("/portfolio/refresh-prices")
+async def refresh_portfolio_prices(user: dict = Depends(get_current_user)):
+    """Refresh all crypto prices in the portfolio"""
+    user_id = user["id"]
+    
+    # Get all crypto assets
+    crypto_assets = await db.portfolio.find(
+        {"user_id": user_id, "asset_type": "crypto", "symbol": {"$ne": None}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    if not crypto_assets:
+        return {"updated": 0, "message": "Aucun actif crypto avec symbole trouvé"}
+    
+    # Get unique symbols
+    symbols = list(set(a["symbol"] for a in crypto_assets if a.get("symbol")))
+    
+    if not symbols:
+        return {"updated": 0}
+    
+    # Fetch prices
+    try:
+        coin_ids = [CRYPTO_SYMBOL_MAP.get(s, s.lower()) for s in symbols]
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{COINGECKO_BASE_URL}/simple/price",
+                params={
+                    "ids": ",".join(coin_ids),
+                    "vs_currencies": "eur"
+                },
+                timeout=10.0
+            )
+            response.raise_for_status()
+            prices = response.json()
+        
+        # Update assets
+        updated_count = 0
+        now = datetime.now(timezone.utc).isoformat()
+        
+        for asset in crypto_assets:
+            symbol = asset.get("symbol")
+            coin_id = CRYPTO_SYMBOL_MAP.get(symbol, symbol.lower())
+            
+            if coin_id in prices and "eur" in prices[coin_id]:
+                new_price = prices[coin_id]["eur"]
+                await db.portfolio.update_one(
+                    {"id": asset["id"]},
+                    {"$set": {"current_price": new_price, "updated_at": now}}
+                )
+                updated_count += 1
+        
+        return {"updated": updated_count, "message": f"{updated_count} prix mis à jour"}
+    
+    except httpx.HTTPError as e:
+        logger.error(f"Price refresh error: {e}")
+        raise HTTPException(status_code=503, detail="Impossible de récupérer les prix")
+
+# ==================== PRICE ALERTS ====================
+
+class PriceAlertCreate(BaseModel):
+    item_type: str  # portfolio, wishlist, inventory
+    item_id: str
+    alert_type: str  # target_price, price_change_up, price_change_down
+    target_value: float  # Target price or percentage
+    is_percentage: bool = False
+    notify_email: bool = False
+
+class PriceAlertResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    item_type: str
+    item_id: str
+    item_name: str
+    alert_type: str
+    target_value: float
+    is_percentage: bool
+    current_value: Optional[float] = None
+    triggered: bool = False
+    triggered_at: Optional[str] = None
+    created_at: str
+
+@api_router.post("/alerts", response_model=PriceAlertResponse)
+async def create_price_alert(data: PriceAlertCreate, user: dict = Depends(get_current_user)):
+    """Create a price alert for an item"""
+    user_id = user["id"]
+    
+    # Get item details
+    collection_map = {
+        "portfolio": db.portfolio,
+        "wishlist": db.wishlist,
+        "inventory": db.inventory
+    }
+    
+    if data.item_type not in collection_map:
+        raise HTTPException(status_code=400, detail="Type d'item invalide")
+    
+    collection = collection_map[data.item_type]
+    item = await collection.find_one({"id": data.item_id, "user_id": user_id}, {"_id": 0})
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item non trouvé")
+    
+    # Get item name and current value
+    item_name = item.get("name") or item.get("title", "Sans nom")
+    
+    if data.item_type == "portfolio":
+        current_value = item.get("current_price") or item.get("purchase_price")
+    elif data.item_type == "wishlist":
+        current_value = item.get("price")
+    else:  # inventory
+        current_value = item.get("current_value") or item.get("purchase_price")
+    
+    alert_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    alert_doc = {
+        "id": alert_id,
+        "user_id": user_id,
+        "item_type": data.item_type,
+        "item_id": data.item_id,
+        "item_name": item_name,
+        "alert_type": data.alert_type,
+        "target_value": data.target_value,
+        "is_percentage": data.is_percentage,
+        "current_value": current_value,
+        "triggered": False,
+        "triggered_at": None,
+        "created_at": now
+    }
+    
+    await db.alerts.insert_one(alert_doc)
+    alert_doc.pop("_id", None)
+    
+    return PriceAlertResponse(**alert_doc)
+
+@api_router.get("/alerts", response_model=List[PriceAlertResponse])
+async def get_alerts(user: dict = Depends(get_current_user), triggered: Optional[bool] = None):
+    """Get all price alerts for the user"""
+    query = {"user_id": user["id"]}
+    if triggered is not None:
+        query["triggered"] = triggered
+    
+    alerts = await db.alerts.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [PriceAlertResponse(**a) for a in alerts]
+
+@api_router.delete("/alerts/{alert_id}")
+async def delete_alert(alert_id: str, user: dict = Depends(get_current_user)):
+    """Delete a price alert"""
+    result = await db.alerts.delete_one({"id": alert_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Alerte non trouvée")
+    return {"message": "Alerte supprimée"}
+
+@api_router.post("/alerts/check")
+async def check_alerts(user: dict = Depends(get_current_user)):
+    """Check all alerts and mark triggered ones"""
+    user_id = user["id"]
+    
+    # Get non-triggered alerts
+    alerts = await db.alerts.find(
+        {"user_id": user_id, "triggered": False},
+        {"_id": 0}
+    ).to_list(100)
+    
+    triggered_alerts = []
+    now = datetime.now(timezone.utc).isoformat()
+    
+    collection_map = {
+        "portfolio": db.portfolio,
+        "wishlist": db.wishlist,
+        "inventory": db.inventory
+    }
+    
+    for alert in alerts:
+        collection = collection_map.get(alert["item_type"])
+        if not collection:
+            continue
+        
+        item = await collection.find_one({"id": alert["item_id"]}, {"_id": 0})
+        if not item:
+            continue
+        
+        # Get current value
+        if alert["item_type"] == "portfolio":
+            current = item.get("current_price") or item.get("purchase_price", 0)
+            base = item.get("purchase_price", 0)
+        elif alert["item_type"] == "wishlist":
+            current = item.get("price", 0)
+            base = alert.get("current_value", current)
+        else:
+            current = item.get("current_value") or item.get("purchase_price", 0)
+            base = item.get("purchase_price", 0)
+        
+        if not current:
+            continue
+        
+        triggered = False
+        
+        if alert["alert_type"] == "target_price":
+            # Target price reached
+            triggered = current <= alert["target_value"]
+        
+        elif alert["alert_type"] == "price_change_up" and base > 0:
+            if alert["is_percentage"]:
+                change_pct = ((current - base) / base) * 100
+                triggered = change_pct >= alert["target_value"]
+            else:
+                triggered = current >= (base + alert["target_value"])
+        
+        elif alert["alert_type"] == "price_change_down" and base > 0:
+            if alert["is_percentage"]:
+                change_pct = ((base - current) / base) * 100
+                triggered = change_pct >= alert["target_value"]
+            else:
+                triggered = current <= (base - alert["target_value"])
+        
+        if triggered:
+            await db.alerts.update_one(
+                {"id": alert["id"]},
+                {"$set": {"triggered": True, "triggered_at": now, "current_value": current}}
+            )
+            triggered_alerts.append({
+                "id": alert["id"],
+                "item_name": alert["item_name"],
+                "alert_type": alert["alert_type"],
+                "target_value": alert["target_value"],
+                "current_value": current
+            })
+    
+    return {
+        "checked": len(alerts),
+        "triggered": len(triggered_alerts),
+        "alerts": triggered_alerts
+    }
+
+# ==================== ITEM LINKS ====================
+
+class LinkItemsRequest(BaseModel):
+    source_type: str
+    source_id: str
+    target_type: str
+    target_id: str
+    label: Optional[str] = None
+
+@api_router.post("/links")
+async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_user)):
+    """Create a bidirectional link between two items"""
+    user_id = user["id"]
+    
+    collection_map = {
+        "collection": db.collections,
+        "inventory": db.inventory,
+        "wishlist": db.wishlist,
+        "project": db.projects,
+        "task": db.tasks,
+        "content": db.content,
+        "portfolio": db.portfolio
+    }
+    
+    if data.source_type not in collection_map or data.target_type not in collection_map:
+        raise HTTPException(status_code=400, detail="Type d'item invalide")
+    
+    # Verify both items exist
+    source_col = collection_map[data.source_type]
+    target_col = collection_map[data.target_type]
+    
+    source_item = await source_col.find_one({"id": data.source_id, "user_id": user_id})
+    target_item = await target_col.find_one({"id": data.target_id, "user_id": user_id})
+    
+    if not source_item or not target_item:
+        raise HTTPException(status_code=404, detail="Item source ou cible non trouvé")
+    
+    # Get names for display
+    source_name = source_item.get("name") or source_item.get("title", "Sans nom")
+    target_name = target_item.get("name") or target_item.get("title", "Sans nom")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Add link to source -> target
+    source_link = {
+        "item_id": data.target_id,
+        "item_type": data.target_type,
+        "item_name": target_name,
+        "label": data.label,
+        "created_at": now
+    }
+    
+    # Add link to target -> source (bidirectional)
+    target_link = {
+        "item_id": data.source_id,
+        "item_type": data.source_type,
+        "item_name": source_name,
+        "label": data.label,
+        "created_at": now
+    }
+    
+    # Update both items
+    await source_col.update_one(
+        {"id": data.source_id},
+        {"$push": {"links": source_link}, "$set": {"updated_at": now}}
+    )
+    
+    await target_col.update_one(
+        {"id": data.target_id},
+        {"$push": {"links": target_link}, "$set": {"updated_at": now}}
+    )
+    
+    return {
+        "message": "Lien créé",
+        "source": {"id": data.source_id, "name": source_name},
+        "target": {"id": data.target_id, "name": target_name}
+    }
+
+@api_router.delete("/links")
+async def unlink_items(
+    source_type: str,
+    source_id: str,
+    target_type: str,
+    target_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Remove a link between two items"""
+    user_id = user["id"]
+    
+    collection_map = {
+        "collection": db.collections,
+        "inventory": db.inventory,
+        "wishlist": db.wishlist,
+        "project": db.projects,
+        "task": db.tasks,
+        "content": db.content,
+        "portfolio": db.portfolio
+    }
+    
+    source_col = collection_map.get(source_type)
+    target_col = collection_map.get(target_type)
+    
+    if not source_col or not target_col:
+        raise HTTPException(status_code=400, detail="Type d'item invalide")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Remove link from both items
+    await source_col.update_one(
+        {"id": source_id, "user_id": user_id},
+        {"$pull": {"links": {"item_id": target_id}}, "$set": {"updated_at": now}}
+    )
+    
+    await target_col.update_one(
+        {"id": target_id, "user_id": user_id},
+        {"$pull": {"links": {"item_id": source_id}}, "$set": {"updated_at": now}}
+    )
+    
+    return {"message": "Lien supprimé"}
+
+@api_router.get("/links/{item_type}/{item_id}")
+async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_current_user)):
+    """Get all links for an item with full details"""
+    user_id = user["id"]
+    
+    collection_map = {
+        "collection": db.collections,
+        "inventory": db.inventory,
+        "wishlist": db.wishlist,
+        "project": db.projects,
+        "task": db.tasks,
+        "content": db.content,
+        "portfolio": db.portfolio
+    }
+    
+    if item_type not in collection_map:
+        raise HTTPException(status_code=400, detail="Type d'item invalide")
+    
+    collection = collection_map[item_type]
+    item = await collection.find_one({"id": item_id, "user_id": user_id}, {"_id": 0})
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item non trouvé")
+    
+    links = item.get("links", [])
+    
+    # Enrich links with current item details
+    enriched_links = []
+    for link in links:
+        linked_col = collection_map.get(link.get("item_type"))
+        if linked_col:
+            linked_item = await linked_col.find_one(
+                {"id": link["item_id"], "user_id": user_id},
+                {"_id": 0, "name": 1, "title": 1, "description": 1, "id": 1}
+            )
+            if linked_item:
+                enriched_links.append({
+                    **link,
+                    "item_name": linked_item.get("name") or linked_item.get("title", "Sans nom"),
+                    "item_description": linked_item.get("description", "")
+                })
+    
+    return enriched_links
+
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
