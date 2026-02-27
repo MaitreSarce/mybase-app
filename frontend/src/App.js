@@ -10,6 +10,7 @@ import WishlistPage from "./pages/WishlistPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ContentPage from "./pages/ContentPage";
 import PortfolioPage from "./pages/PortfolioPage";
+import AlertsPage from "./pages/AlertsPage";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
