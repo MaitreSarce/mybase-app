@@ -65,6 +65,7 @@ const PortfolioPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [newTag, setNewTag] = useState('');
   const [formData, setFormData] = useState({
