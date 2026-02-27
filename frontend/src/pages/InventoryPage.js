@@ -256,14 +256,14 @@ const InventoryPage = () => {
                   <div className="space-y-2">
                     <Label>Collection</Label>
                     <Select
-                      value={formData.collection_id}
-                      onValueChange={(value) => setFormData({ ...formData, collection_id: value })}
+                      value={formData.collection_id || "none"}
+                      onValueChange={(value) => setFormData({ ...formData, collection_id: value === "none" ? "" : value })}
                     >
                       <SelectTrigger data-testid="item-collection-select">
                         <SelectValue placeholder="Sélectionner..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Aucune</SelectItem>
+                        <SelectItem value="none">Aucune</SelectItem>
                         {collections.map((c) => (
                           <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                         ))}
@@ -318,13 +318,14 @@ const InventoryPage = () => {
                   <div className="space-y-2">
                     <Label htmlFor="condition">État</Label>
                     <Select
-                      value={formData.condition}
-                      onValueChange={(value) => setFormData({ ...formData, condition: value })}
+                      value={formData.condition || "none"}
+                      onValueChange={(value) => setFormData({ ...formData, condition: value === "none" ? "" : value })}
                     >
                       <SelectTrigger data-testid="item-condition-select">
                         <SelectValue placeholder="Sélectionner..." />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">Non spécifié</SelectItem>
                         <SelectItem value="neuf">Neuf</SelectItem>
                         <SelectItem value="excellent">Excellent</SelectItem>
                         <SelectItem value="bon">Bon</SelectItem>

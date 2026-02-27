@@ -327,14 +327,14 @@ const ProjectsPage = () => {
                     <div className="space-y-2">
                       <Label>Projet</Label>
                       <Select
-                        value={taskForm.project_id}
-                        onValueChange={(value) => setTaskForm({ ...taskForm, project_id: value })}
+                        value={taskForm.project_id || "none"}
+                        onValueChange={(value) => setTaskForm({ ...taskForm, project_id: value === "none" ? "" : value })}
                       >
                         <SelectTrigger data-testid="task-project-select">
                           <SelectValue placeholder="Aucun projet" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Aucun projet</SelectItem>
+                          <SelectItem value="none">Aucun projet</SelectItem>
                           {projects.map((p) => (
                             <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                           ))}
