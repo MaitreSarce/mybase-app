@@ -183,6 +183,7 @@ class WishlistItemCreate(BaseModel):
     metadata: List[MetadataField] = []
     links: List[ItemLink] = []
     target_date: Optional[str] = None
+    collection_id: Optional[str] = None
 
 class WishlistItemUpdate(BaseModel):
     name: Optional[str] = None
@@ -196,6 +197,7 @@ class WishlistItemUpdate(BaseModel):
     links: Optional[List[ItemLink]] = None
     target_date: Optional[str] = None
     purchased: Optional[bool] = None
+    collection_id: Optional[str] = None
 
 class WishlistItemResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -213,6 +215,7 @@ class WishlistItemResponse(BaseModel):
     attachments: List[Dict[str, Any]] = []
     target_date: Optional[str] = None
     purchased: bool = False
+    collection_id: Optional[str] = None
     created_at: str
     updated_at: str
 
