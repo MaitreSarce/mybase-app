@@ -633,6 +633,7 @@ async def create_wishlist_item(data: WishlistItemCreate, user: dict = Depends(ge
         "attachments": [],
         "target_date": data.target_date,
         "purchased": False,
+        "collection_id": data.collection_id,
         "created_at": now,
         "updated_at": now
     }
