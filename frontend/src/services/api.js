@@ -107,6 +107,7 @@ export const searchApi = {
 // Tags API (auto-discover from all items)
 export const tagsApi = {
   getAll: () => api.get('/tags/all'),
+  getItemsByTag: (tagName) => api.get(`/tags/${encodeURIComponent(tagName)}/items`),
 };
 
 // Upload API
