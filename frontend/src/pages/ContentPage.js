@@ -131,8 +131,10 @@ const ContentPage = () => {
 
   const handleAddCustomType = () => {
     if (customType.trim()) {
-      setFormData({ ...formData, content_type: customType.trim().toLowerCase() });
+      const newType = customType.trim().toLowerCase();
+      setFormData({ ...formData, content_type: newType });
       setCustomType('');
+      toast.success(`Type "${newType}" sélectionné`);
     }
   };
 
