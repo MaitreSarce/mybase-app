@@ -334,7 +334,7 @@ const CollectionsPage = () => {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : view === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCollections.map(collection => (
             <Card key={collection.id}
@@ -373,6 +373,30 @@ const CollectionsPage = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-border">
+          <Table>
+            <TableHeader><TableRow><TableHead>Nom</TableHead><TableHead>Items</TableHead><TableHead>Catégorie</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+            <TableBody>
+              {filteredCollections.map(collection => (
+                <TableRow key={collection.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => handleSelectCollection(collection)}>
+                  <TableCell className="font-medium"><div className="flex items-center gap-2"><div className={`w-2.5 h-2.5 rounded-full ${getColorClass(collection.color)}`} />{collection.name}</div></TableCell>
+                  <TableCell><Badge variant="secondary" className="font-mono text-xs">{collection.item_count}</Badge></TableCell>
+                  <TableCell>{collection.category || '-'}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onCloseAutoFocus={e => e.preventDefault()}>
+                        <DropdownMenuItem onSelect={() => handleOpenDialog(collection)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleDelete(collection)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
