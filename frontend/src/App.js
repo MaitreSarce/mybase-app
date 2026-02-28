@@ -13,6 +13,7 @@ import PortfolioPage from "./pages/PortfolioPage";
 import AlertsPage from "./pages/AlertsPage";
 import TagsPage from "./pages/TagsPage";
 import MindmapPage from "./pages/MindmapPage";
+import CalendarPage from "./pages/CalendarPage";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -81,6 +82,7 @@ function App() {
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="mindmap" element={<MindmapPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
           </Route>
         </Routes>
         <Toaster richColors position="bottom-right" />
