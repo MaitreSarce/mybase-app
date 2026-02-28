@@ -145,10 +145,10 @@ const WishlistPage = () => {
           {filteredItems.map(item => {
             const pi = getPriorityInfo(item.priority); const col = collections.find(c => c.id === item.collection_id);
             return (
-              <Card key={item.id} className={`bg-card border-border card-hover group cursor-pointer ${item.purchased ? 'opacity-60' : ''}`}
-                onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`wishlist-card-${item.id}`}>
+              <Card key={item.id} className={`bg-card border-border card-hover group ${item.purchased ? 'opacity-60' : ''}`}
+                data-testid={`wishlist-card-${item.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => handleOpenDialog(item)}>
                     <button onClick={(e) => handleTogglePurchased(e, item)}
                       className={`mt-1 h-5 w-5 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${item.purchased ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-border hover:border-primary'}`}>
                       {item.purchased && <Check className="h-3 w-3" />}
@@ -161,17 +161,15 @@ const WishlistPage = () => {
                       </div>
                     </div>
                   </div>
-                  <DropdownMenu onOpenChange={(open) => {
-                    if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
-                  }}>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
                   <div className="flex justify-between items-center">
                     <span className="text-xl font-bold font-mono">{fmt(item.price, item.currency)}</span>
                     {item.url && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={e => { e.stopPropagation(); window.open(item.url, '_blank'); }}><ExternalLink className="h-4 w-4" /></Button>}
