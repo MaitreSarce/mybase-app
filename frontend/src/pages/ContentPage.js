@@ -58,14 +58,19 @@ const ContentPage = () => {
     finally { setLoading(false); }
   };
 
-  // Discover all content types from items (built-in + custom)
+  // Discover all content types from items (built-in + custom + current form type)
   const allContentTypes = (() => {
     const builtIn = DEFAULT_TYPES.map(t => t.value);
-    const custom = [...new Set(items.map(i => i.content_type).filter(t => !builtIn.includes(t)))];
-    return [
+    const customFromItems = [...new Set(items.map(i => i.content_type).filter(t => t && !builtIn.includes(t)))];
+    const types = [
       ...DEFAULT_TYPES,
-      ...custom.map(t => ({ value: t, label: t, icon: FileText, color: 'text-zinc-400' }))
+      ...customFromItems.map(t => ({ value: t, label: t, icon: FileText, color: 'text-zinc-400' }))
     ];
+    // Add current form type if not already present
+    if (formData.content_type && !types.find(t => t.value === formData.content_type)) {
+      types.push({ value: formData.content_type, label: formData.content_type, icon: FileText, color: 'text-zinc-400' });
+    }
+    return types;
   })();
 
   const handleOpenDialog = (item = null) => {
