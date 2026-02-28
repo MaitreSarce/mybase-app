@@ -17,7 +17,12 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '../components/ui/table';
 import { Plus, MoreVertical, Pencil, Trash2, Package, Loader2, Search, Tag, X } from 'lucide-react';
+import { MultiSelect } from '../components/MultiSelect';
+import { ViewToggle } from '../components/ViewToggle';
 import ItemLinksManager from '../components/ItemLinksManager';
 
 const InventoryPage = () => {
@@ -29,8 +34,9 @@ const InventoryPage = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterCollection, setFilterCollection] = useState('all');
-  const [filterTag, setFilterTag] = useState('all');
+  const [filterCollections, setFilterCollections] = useState([]);
+  const [filterTags, setFilterTags] = useState([]);
+  const [view, setView] = useState('card');
   const [newTag, setNewTag] = useState('');
   const [formData, setFormData] = useState({
     name: '', description: '', collection_id: '', tags: [], metadata: [],
@@ -94,10 +100,9 @@ const InventoryPage = () => {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Supprimer "${item.name}" ?`)) return;
     try {
       await inventoryApi.delete(item.id);
-      toast.success('Item supprimé');
+      toast.success(`"${item.name}" supprimé`);
       fetchData();
     } catch { toast.error('Erreur lors de la suppression'); }
   };
@@ -109,63 +114,42 @@ const InventoryPage = () => {
     }
   };
   const removeTag = (t) => setFormData({ ...formData, tags: formData.tags.filter(x => x !== t) });
-
   const fmt = (v) => v ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v) : '-';
 
   const filteredItems = items.filter(item => {
-    const matchesSearch = !searchQuery ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCollection = filterCollection === 'all' || item.collection_id === filterCollection;
-    const matchesTag = filterTag === 'all' || item.tags?.includes(filterTag);
-    return matchesSearch && matchesCollection && matchesTag;
+    if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !item.description?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (filterCollections.length && !filterCollections.includes(item.collection_id)) return false;
+    if (filterTags.length && !filterTags.some(t => item.tags?.includes(t))) return false;
+    return true;
   });
 
-  const tagNames = allTags.map(t => t.name);
+  const tagOptions = allTags.map(t => ({ value: t.name, label: t.name }));
+  const colOptions = collections.map(c => ({ value: c.id, label: c.name }));
 
-  if (loading) {
-    return (<div className="space-y-6"><Skeleton className="h-8 w-48" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32" />)}</div></div>);
-  }
+  if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32" />)}</div></div>;
 
   return (
     <div className="space-y-6" data-testid="inventory-page">
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inventaire</h1>
-          <p className="text-muted-foreground mt-1">Gérez tous vos biens et possessions</p>
+          <p className="text-muted-foreground mt-1">{filteredItems.length} items</p>
         </div>
         <Button onClick={() => handleOpenDialog()} data-testid="add-item-btn">
           <Plus className="h-4 w-4 mr-2" />Nouvel item
         </Button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input type="search" placeholder="Rechercher..." value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)} className="pl-10" data-testid="inventory-search-input" />
+            onChange={e => setSearchQuery(e.target.value)} className="pl-10" data-testid="inventory-search" />
         </div>
-        <Select value={filterCollection} onValueChange={setFilterCollection}>
-          <SelectTrigger className="w-[200px]" data-testid="inventory-filter-collection">
-            <SelectValue placeholder="Collection" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les collections</SelectItem>
-            {collections.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {tagNames.length > 0 && (
-          <Select value={filterTag} onValueChange={setFilterTag}>
-            <SelectTrigger className="w-[160px]" data-testid="inventory-filter-tag">
-              <SelectValue placeholder="Tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous les tags</SelectItem>
-              {tagNames.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
+        {colOptions.length > 0 && <MultiSelect options={colOptions} selected={filterCollections} onChange={setFilterCollections} placeholder="Collections" testId="filter-collections" />}
+        {tagOptions.length > 0 && <MultiSelect options={tagOptions} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="filter-tags" />}
+        <ViewToggle view={view} onChange={setView} />
       </div>
 
       {filteredItems.length === 0 ? (
@@ -173,12 +157,9 @@ const InventoryPage = () => {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Package className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">Aucun item</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {searchQuery || filterCollection !== 'all' || filterTag !== 'all' ? 'Aucun résultat' : "Ajoutez votre premier item"}
-            </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : view === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map(item => (
             <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer"
@@ -190,41 +171,30 @@ const InventoryPage = () => {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={e => e.stopPropagation()}>
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => { handleOpenDialog(item); }}>
+                    <DropdownMenuItem onSelect={() => handleOpenDialog(item)}>
                       <Pencil className="h-4 w-4 mr-2" />Modifier
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive">
+                    <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive">
                       <Trash2 className="h-4 w-4 mr-2" />Supprimer
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </CardHeader>
               <CardContent>
-                {item.description && <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{item.description}</p>}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Valeur</span>
-                    <span className="font-mono font-medium">{fmt(item.current_value || item.purchase_price)}</span>
-                  </div>
-                  {item.condition && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">État</span>
-                      <Badge variant="outline" className="capitalize">{item.condition}</Badge>
-                    </div>
-                  )}
+                {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Valeur</span>
+                  <span className="font-mono font-medium">{fmt(item.current_value || item.purchase_price)}</span>
                 </div>
                 {item.tags?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {item.tags.slice(0, 3).map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-xs"><Tag className="h-3 w-3 mr-1" />{tag}</Badge>
-                    ))}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {item.tags.slice(0, 3).map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
                     {item.tags.length > 3 && <Badge variant="secondary" className="text-xs">+{item.tags.length - 3}</Badge>}
                   </div>
                 )}
@@ -232,33 +202,61 @@ const InventoryPage = () => {
             </Card>
           ))}
         </div>
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Nom</TableHead><TableHead>Valeur</TableHead><TableHead>État</TableHead><TableHead>Tags</TableHead><TableHead className="w-10"></TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredItems.map(item => (
+                <TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => handleOpenDialog(item)} data-testid={`inventory-row-${item.id}`}>
+                  <TableCell className="font-medium">{item.name}{item.quantity > 1 ? ` (x${item.quantity})` : ''}</TableCell>
+                  <TableCell className="font-mono">{fmt(item.current_value || item.purchase_price)}</TableCell>
+                  <TableCell>{item.condition && <Badge variant="outline" className="capitalize text-xs">{item.condition}</Badge>}</TableCell>
+                  <TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}>
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive">
+                          <Trash2 className="h-4 w-4 mr-2" />Supprimer
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
-      {/* Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>{editingItem ? "Modifier l'item" : 'Nouvel item'}</DialogTitle>
-              <DialogDescription>Ajoutez un item à votre inventaire</DialogDescription>
+              <DialogDescription>Gérez votre item d'inventaire</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2 col-span-2">
                   <Label>Nom *</Label>
-                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                    placeholder="Ex: Rolex Submariner" required data-testid="item-name-input" />
+                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ex: Rolex Submariner" required data-testid="item-name-input" />
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label>Description</Label>
-                  <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
-                    placeholder="Description..." data-testid="item-description-input" />
+                  <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Description..." />
                 </div>
                 <div className="space-y-2">
                   <Label>Collection</Label>
-                  <Select value={formData.collection_id || "none"}
-                    onValueChange={v => setFormData({...formData, collection_id: v === "none" ? "" : v})}>
-                    <SelectTrigger data-testid="item-collection-select"><SelectValue placeholder="Aucune" /></SelectTrigger>
+                  <Select value={formData.collection_id || "none"} onValueChange={v => setFormData({...formData, collection_id: v === "none" ? "" : v})}>
+                    <SelectTrigger><SelectValue placeholder="Aucune" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Aucune</SelectItem>
                       {collections.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -267,66 +265,49 @@ const InventoryPage = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Quantité</Label>
-                  <Input type="number" min="1" value={formData.quantity}
-                    onChange={e => setFormData({...formData, quantity: e.target.value})} data-testid="item-quantity-input" />
+                  <Input type="number" min="1" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Prix d'achat</Label>
-                  <Input type="number" step="0.01" value={formData.purchase_price}
-                    onChange={e => setFormData({...formData, purchase_price: e.target.value})} placeholder="0.00" data-testid="item-purchase-price-input" />
+                  <Input type="number" step="0.01" value={formData.purchase_price} onChange={e => setFormData({...formData, purchase_price: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Valeur actuelle</Label>
-                  <Input type="number" step="0.01" value={formData.current_value}
-                    onChange={e => setFormData({...formData, current_value: e.target.value})} placeholder="0.00" data-testid="item-current-value-input" />
+                  <Input type="number" step="0.01" value={formData.current_value} onChange={e => setFormData({...formData, current_value: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Date d'achat</Label>
-                  <Input type="date" value={formData.purchase_date}
-                    onChange={e => setFormData({...formData, purchase_date: e.target.value})} data-testid="item-purchase-date-input" />
+                  <Input type="date" value={formData.purchase_date} onChange={e => setFormData({...formData, purchase_date: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>État</Label>
-                  <Select value={formData.condition || "none"}
-                    onValueChange={v => setFormData({...formData, condition: v === "none" ? "" : v})}>
-                    <SelectTrigger data-testid="item-condition-select"><SelectValue placeholder="Non spécifié" /></SelectTrigger>
+                  <Select value={formData.condition || "none"} onValueChange={v => setFormData({...formData, condition: v === "none" ? "" : v})}>
+                    <SelectTrigger><SelectValue placeholder="Non spécifié" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Non spécifié</SelectItem>
-                      <SelectItem value="neuf">Neuf</SelectItem>
-                      <SelectItem value="excellent">Excellent</SelectItem>
-                      <SelectItem value="bon">Bon</SelectItem>
-                      <SelectItem value="correct">Correct</SelectItem>
-                      <SelectItem value="usage">Usagé</SelectItem>
+                      <SelectItem value="neuf">Neuf</SelectItem><SelectItem value="excellent">Excellent</SelectItem>
+                      <SelectItem value="bon">Bon</SelectItem><SelectItem value="correct">Correct</SelectItem><SelectItem value="usage">Usagé</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label>Emplacement</Label>
-                  <Input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})}
-                    placeholder="Ex: Coffre-fort, Garage..." data-testid="item-location-input" />
+                  <Input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="Ex: Coffre-fort, Garage..." />
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label>Tags</Label>
                   <div className="flex gap-2">
-                    <Input value={newTag} onChange={e => setNewTag(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                      placeholder="Ajouter un tag..." data-testid="item-tag-input" />
+                    <Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Ajouter un tag..." />
                     <Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button>
                   </div>
                   {formData.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {formData.tags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="gap-1">
-                          {tag}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
-                        </Badge>
-                      ))}
+                      {formData.tags.map(tag => <Badge key={tag} variant="secondary" className="gap-1">{tag}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} /></Badge>)}
                     </div>
                   )}
                 </div>
               </div>
-              {editingItem && (
-                <ItemLinksManager itemType="inventory" itemId={editingItem.id} itemName={editingItem.name} onUpdate={fetchData} />
-              )}
+              {editingItem && <ItemLinksManager itemType="inventory" itemId={editingItem.id} itemName={editingItem.name} onUpdate={fetchData} />}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
