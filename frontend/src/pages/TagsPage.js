@@ -91,9 +91,11 @@ const TagsPage = () => {
     finally { setEditSaving(false); }
   };
 
-  const filtered = filterSource === 'all'
+  const filtered = filterSources.length === 0
     ? tags
-    : tags.filter(t => t.sources?.includes(filterSource));
+    : tags.filter(t => t.sources?.some(s => filterSources.includes(s)));
+
+  const sourceOpts = Object.entries(SOURCE_LABELS).map(([k, v]) => ({ value: k, label: v.label }));
 
   const getItemName = (item) => item.name || item.title || 'Sans nom';
 
