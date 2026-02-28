@@ -102,8 +102,7 @@ const WishlistPage = () => {
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (e, item) => {
-    e.stopPropagation();
+  const handleDelete = async (item) => {
     if (!window.confirm(`Supprimer "${item.name}" ?`)) return;
     try {
       await wishlistApi.delete(item.id);
