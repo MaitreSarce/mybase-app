@@ -2179,6 +2179,27 @@ async def get_all_tags(user: dict = Depends(get_current_user)):
         result.append({"name": info["name"], "count": info["count"], "sources": list(info["sources"])})
     return result
 
+@api_router.get("/tags/{tag_name}/items")
+async def get_items_by_tag(tag_name: str, user: dict = Depends(get_current_user)):
+    """Get all items that have a specific tag"""
+    user_id = user["id"]
+    source_map = {
+        "inventory": db.inventory,
+        "wishlist": db.wishlist,
+        "content": db.content,
+        "portfolio": db.portfolio,
+        "projects": db.projects,
+        "tasks": db.tasks,
+    }
+    results = {}
+    for source_name, col in source_map.items():
+        items = await col.find(
+            {"user_id": user_id, "tags": tag_name}, {"_id": 0}
+        ).to_list(1000)
+        if items:
+            results[source_name] = items
+    return results
+
 @api_router.get("/collections/{collection_id}/items")
 async def get_collection_items(collection_id: str, user: dict = Depends(get_current_user)):
     """Get all inventory + wishlist items belonging to a collection"""
