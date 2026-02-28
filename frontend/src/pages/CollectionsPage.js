@@ -51,6 +51,7 @@ const CollectionsPage = () => {
   const [formData, setFormData] = useState({
     name: '', description: '', category: '', color: 'blue', metadata_schema: []
   });
+  const dropdownActionRef = useRef(false);
 
   useEffect(() => { fetchData(); }, []);
 
