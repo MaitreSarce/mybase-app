@@ -214,10 +214,10 @@ const ContentPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenDialog(item); }}>
+                      <DropdownMenuItem onClick={() => handleOpenDialog(item)}>
                         <Pencil className="h-4 w-4 mr-2" />Modifier
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => handleDelete(e, item)} className="text-destructive">
+                      <DropdownMenuItem onClick={() => handleDelete(item)} className="text-destructive">
                         <Trash2 className="h-4 w-4 mr-2" />Supprimer
                       </DropdownMenuItem>
                     </DropdownMenuContent>
