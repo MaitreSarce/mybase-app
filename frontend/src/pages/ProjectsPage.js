@@ -280,145 +280,27 @@ const ProjectsPage = () => {
           <p className="text-muted-foreground mt-1">Organisez vos projets et suivez vos tâches</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" onClick={() => handleOpenTaskDialog()} data-testid="add-task-btn">
-                <Plus className="h-4 w-4 mr-2" />Nouvelle tâche
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <form onSubmit={handleSubmitTask}>
-                <DialogHeader>
-                  <DialogTitle>{editingTask ? 'Modifier la tâche' : 'Nouvelle tâche'}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="task-title">Titre *</Label>
-                    <Input id="task-title" value={taskForm.title}
-                      onChange={e => setTaskForm({...taskForm, title: e.target.value})}
-                      placeholder="Ex: Finaliser le rapport" required data-testid="task-title-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="task-description">Description</Label>
-                    <Textarea id="task-description" value={taskForm.description}
-                      onChange={e => setTaskForm({...taskForm, description: e.target.value})}
-                      placeholder="Détails de la tâche..." data-testid="task-description-input" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Projet</Label>
-                      <Select value={taskForm.project_id || "none"}
-                        onValueChange={v => setTaskForm({...taskForm, project_id: v === "none" ? "" : v})}>
-                        <SelectTrigger data-testid="task-project-select"><SelectValue placeholder="Aucun projet" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Aucun projet</SelectItem>
-                          {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Priorité</Label>
-                      <Select value={String(taskForm.priority)}
-                        onValueChange={v => setTaskForm({...taskForm, priority: parseInt(v)})}>
-                        <SelectTrigger data-testid="task-priority-select"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {PRIORITIES.map(p => (
-                            <SelectItem key={p.value} value={String(p.value)}>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${p.color}`} />{p.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="task-due-date">Date d'échéance</Label>
-                    <Input id="task-due-date" type="date" value={taskForm.due_date}
-                      onChange={e => setTaskForm({...taskForm, due_date: e.target.value})}
-                      data-testid="task-due-date-input" />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setTaskDialogOpen(false)}>Annuler</Button>
-                  <Button type="submit" disabled={saving} data-testid="task-submit-btn">
-                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {editingTask ? 'Mettre à jour' : 'Créer'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => handleOpenProjectDialog()} data-testid="add-project-btn">
-                <Plus className="h-4 w-4 mr-2" />Nouveau projet
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <form onSubmit={handleSubmitProject}>
-                <DialogHeader>
-                  <DialogTitle>{editingProject ? 'Modifier le projet' : 'Nouveau projet'}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="project-name">Nom *</Label>
-                    <Input id="project-name" value={projectForm.name}
-                      onChange={e => setProjectForm({...projectForm, name: e.target.value})}
-                      placeholder="Ex: Rénovation cuisine" required data-testid="project-name-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="project-description">Description</Label>
-                    <Textarea id="project-description" value={projectForm.description}
-                      onChange={e => setProjectForm({...projectForm, description: e.target.value})}
-                      placeholder="Description du projet..." data-testid="project-description-input" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Couleur</Label>
-                      <Select value={projectForm.color}
-                        onValueChange={v => setProjectForm({...projectForm, color: v})}>
-                        <SelectTrigger data-testid="project-color-select"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {COLORS.map(c => (
-                            <SelectItem key={c.value} value={c.value}>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-3 h-3 rounded-full ${c.class}`} />{c.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Projet parent</Label>
-                      <Select value={projectForm.parent_id || "none"}
-                        onValueChange={v => setProjectForm({...projectForm, parent_id: v === "none" ? "" : v})}>
-                        <SelectTrigger data-testid="project-parent-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Aucun (racine)</SelectItem>
-                          {projects.filter(p => p.id !== editingProject?.id).map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setProjectDialogOpen(false)}>Annuler</Button>
-                  <Button type="submit" disabled={saving} data-testid="project-submit-btn">
-                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {editingProject ? 'Mettre à jour' : 'Créer'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" onClick={() => handleOpenTaskDialog()} data-testid="add-task-btn">
+            <Plus className="h-4 w-4 mr-2" />Nouvelle tâche
+          </Button>
+          <Button onClick={() => handleOpenProjectDialog()} data-testid="add-project-btn">
+            <Plus className="h-4 w-4 mr-2" />Nouveau projet
+          </Button>
         </div>
       </div>
+
+      {/* Tag filter */}
+      {tagNames.length > 0 && (
+        <Select value={filterTag} onValueChange={setFilterTag}>
+          <SelectTrigger className="w-[160px]" data-testid="projects-filter-tag">
+            <SelectValue placeholder="Tag" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les tags</SelectItem>
+            {tagNames.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
 
       <Tabs defaultValue="projects" className="space-y-4">
         <TabsList>
@@ -481,11 +363,12 @@ const ProjectsPage = () => {
                 const priorityInfo = getPriorityInfo(task.priority);
                 const project = projects.find(p => p.id === task.project_id);
                 return (
-                  <Card key={task.id} className={`bg-card border-border card-hover ${task.completed ? 'opacity-60' : ''}`}
+                  <Card key={task.id} className={`bg-card border-border card-hover cursor-pointer ${task.completed ? 'opacity-60' : ''}`}
+                    onClick={() => handleOpenTaskDialog(task)}
                     data-testid={`task-card-${task.id}`}>
                     <CardContent className="py-3">
                       <div className="flex items-center gap-4">
-                        <button onClick={() => handleToggleTask(task)} className="flex-shrink-0"
+                        <button onClick={(e) => { e.stopPropagation(); handleToggleTask(task); }} className="flex-shrink-0"
                           data-testid={`task-toggle-${task.id}`}>
                           {task.completed
                             ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
@@ -510,19 +393,6 @@ const ProjectsPage = () => {
                             <Calendar className="h-3 w-3" />{formatDate(task.due_date)}
                           </Badge>
                         )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleOpenTaskDialog(task)}>
-                              <Pencil className="h-4 w-4 mr-2" />Modifier
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteTask(task)} className="text-destructive">
-                              <Trash2 className="h-4 w-4 mr-2" />Supprimer
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </Card>
@@ -532,6 +402,139 @@ const ProjectsPage = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Task Dialog */}
+      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSubmitTask}>
+            <DialogHeader>
+              <DialogTitle>{editingTask ? 'Modifier la tâche' : 'Nouvelle tâche'}</DialogTitle>
+              <DialogDescription>Gérez votre tâche</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Titre *</Label>
+                <Input value={taskForm.title}
+                  onChange={e => setTaskForm({...taskForm, title: e.target.value})}
+                  placeholder="Ex: Finaliser le rapport" required data-testid="task-title-input" />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea value={taskForm.description}
+                  onChange={e => setTaskForm({...taskForm, description: e.target.value})}
+                  placeholder="Détails..." data-testid="task-description-input" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Projet</Label>
+                  <Select value={taskForm.project_id || "none"}
+                    onValueChange={v => setTaskForm({...taskForm, project_id: v === "none" ? "" : v})}>
+                    <SelectTrigger data-testid="task-project-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucun projet</SelectItem>
+                      {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Priorité</Label>
+                  <Select value={String(taskForm.priority)}
+                    onValueChange={v => setTaskForm({...taskForm, priority: parseInt(v)})}>
+                    <SelectTrigger data-testid="task-priority-select"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map(p => (
+                        <SelectItem key={p.value} value={String(p.value)}>
+                          <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${p.color}`} />{p.label}</div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Date d'échéance</Label>
+                <Input type="date" value={taskForm.due_date}
+                  onChange={e => setTaskForm({...taskForm, due_date: e.target.value})} data-testid="task-due-date-input" />
+              </div>
+              {editingTask && (
+                <ItemLinksManager itemType="task" itemId={editingTask.id} itemName={editingTask.title} onUpdate={fetchData} />
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setTaskDialogOpen(false)}>Annuler</Button>
+              <Button type="submit" disabled={saving} data-testid="task-submit-btn">
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {editingTask ? 'Mettre à jour' : 'Créer'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Project Dialog */}
+      <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSubmitProject}>
+            <DialogHeader>
+              <DialogTitle>{editingProject ? 'Modifier le projet' : 'Nouveau projet'}</DialogTitle>
+              <DialogDescription>Gérez votre projet</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nom *</Label>
+                <Input value={projectForm.name}
+                  onChange={e => setProjectForm({...projectForm, name: e.target.value})}
+                  placeholder="Ex: Rénovation cuisine" required data-testid="project-name-input" />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea value={projectForm.description}
+                  onChange={e => setProjectForm({...projectForm, description: e.target.value})}
+                  placeholder="Description..." data-testid="project-description-input" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Couleur</Label>
+                  <Select value={projectForm.color}
+                    onValueChange={v => setProjectForm({...projectForm, color: v})}>
+                    <SelectTrigger data-testid="project-color-select"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COLORS.map(c => (
+                        <SelectItem key={c.value} value={c.value}>
+                          <div className="flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${c.class}`} />{c.label}</div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Projet parent</Label>
+                  <Select value={projectForm.parent_id || "none"}
+                    onValueChange={v => setProjectForm({...projectForm, parent_id: v === "none" ? "" : v})}>
+                    <SelectTrigger data-testid="project-parent-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucun (racine)</SelectItem>
+                      {projects.filter(p => p.id !== editingProject?.id).map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {editingProject && (
+                <ItemLinksManager itemType="project" itemId={editingProject.id} itemName={editingProject.name} onUpdate={fetchData} />
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setProjectDialogOpen(false)}>Annuler</Button>
+              <Button type="submit" disabled={saving} data-testid="project-submit-btn">
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {editingProject ? 'Mettre à jour' : 'Créer'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
