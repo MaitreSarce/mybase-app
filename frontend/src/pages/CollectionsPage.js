@@ -114,6 +114,49 @@ const CollectionsPage = () => {
     } catch { toast.error('Erreur'); }
   };
 
+  const handleOpenItemDialog = (item, type) => {
+    setEditingDetailItem(item);
+    setEditingDetailType(type);
+    if (type === 'inventory') {
+      setItemFormData({
+        name: item.name, description: item.description || '',
+        purchase_price: item.purchase_price || '', current_value: item.current_value || '',
+        location: item.location || '', condition: item.condition || '', quantity: item.quantity || 1,
+        tags: item.tags || [], collection_id: item.collection_id || ''
+      });
+    } else {
+      setItemFormData({
+        name: item.name, description: item.description || '', url: item.url || '',
+        price: item.price || '', priority: item.priority || 3, tags: item.tags || '',
+        collection_id: item.collection_id || ''
+      });
+    }
+    setItemDialogOpen(true);
+  };
+
+  const handleSubmitItem = async (e) => {
+    e.preventDefault();
+    setItemSaving(true);
+    try {
+      const data = { ...itemFormData };
+      if (editingDetailType === 'inventory') {
+        data.purchase_price = data.purchase_price ? parseFloat(data.purchase_price) : null;
+        data.current_value = data.current_value ? parseFloat(data.current_value) : null;
+        data.quantity = parseInt(data.quantity) || 1;
+        data.collection_id = data.collection_id || null;
+        await inventoryApi.update(editingDetailItem.id, data);
+      } else {
+        data.price = data.price ? parseFloat(data.price) : null;
+        data.collection_id = data.collection_id || null;
+        await wishlistApi.update(editingDetailItem.id, data);
+      }
+      toast.success('Item mis à jour');
+      setItemDialogOpen(false);
+      handleSelectCollection(selectedCollection);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
+    finally { setItemSaving(false); }
+  };
+
   const getColorClass = (color) => COLORS.find(c => c.value === color)?.class || 'bg-blue-500';
   const tagNames = allTags.map(t => t.name);
 
