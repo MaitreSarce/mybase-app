@@ -351,7 +351,7 @@ const CollectionsPage = () => {
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                     <DropdownMenuItem onSelect={() => handleOpenDialog(collection)}>
                       <Pencil className="h-4 w-4 mr-2" />Modifier
                     </DropdownMenuItem>

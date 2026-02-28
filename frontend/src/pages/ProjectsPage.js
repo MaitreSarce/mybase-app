@@ -211,7 +211,7 @@ const ProjectsPage = () => {
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                 <DropdownMenuItem onSelect={() => handleOpenTaskDialog(null, project.id)}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
                 </DropdownMenuItem>
