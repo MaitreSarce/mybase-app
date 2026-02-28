@@ -147,7 +147,6 @@ const ProjectsPage = () => {
   };
 
   const handleDeleteProject = async (project) => {
-    if (!window.confirm(`Supprimer le projet "${project.name}" et ses tâches ?`)) return;
     try {
       await projectsApi.delete(project.id);
       toast.success('Projet supprimé');
@@ -156,7 +155,6 @@ const ProjectsPage = () => {
   };
 
   const handleDeleteTask = async (task) => {
-    if (!window.confirm(`Supprimer la tâche "${task.title}" ?`)) return;
     try {
       await tasksApi.delete(task.id);
       toast.success('Tâche supprimée');
@@ -214,16 +212,16 @@ const ProjectsPage = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleOpenTaskDialog(null, project.id)}>
+                <DropdownMenuItem onSelect={() => handleOpenTaskDialog(null, project.id)}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleOpenProjectDialog(null, project.id)}>
+                <DropdownMenuItem onSelect={() => handleOpenProjectDialog(null, project.id)}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter un sous-projet
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleOpenProjectDialog(project)}>
+                <DropdownMenuItem onSelect={() => handleOpenProjectDialog(project)}>
                   <Pencil className="h-4 w-4 mr-2" />Modifier
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDeleteProject(project)} className="text-destructive">
+                <DropdownMenuItem onSelect={() => handleDeleteProject(project)} className="text-destructive">
                   <Trash2 className="h-4 w-4 mr-2" />Supprimer
                 </DropdownMenuItem>
               </DropdownMenuContent>

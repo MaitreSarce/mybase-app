@@ -257,10 +257,10 @@ const CollectionsPage = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleOpenDialog(collection)}>
+                    <DropdownMenuItem onSelect={() => handleOpenDialog(collection)}>
                       <Pencil className="h-4 w-4 mr-2" />Modifier
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDelete(collection)} className="text-destructive">
+                    <DropdownMenuItem onSelect={() => handleDelete(collection)} className="text-destructive">
                       <Trash2 className="h-4 w-4 mr-2" />Supprimer
                     </DropdownMenuItem>
                   </DropdownMenuContent>
