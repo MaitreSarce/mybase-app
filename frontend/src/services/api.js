@@ -160,11 +160,6 @@ export const managedTagsApi = {
   delete: (id) => api.delete(`/tags/manage/${id}`),
 };
 
-// Auto-discover Tags API
-export const tagsApi = {
-  getAll: () => api.get('/tags/all'),
-};
-
 // Collection items API
 export const collectionItemsApi = {
   getItems: (collectionId) => api.get(`/collections/${collectionId}/items`),
