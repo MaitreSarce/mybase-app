@@ -92,8 +92,7 @@ const CollectionsPage = () => {
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (e, collection) => {
-    e.stopPropagation();
+  const handleDelete = async (collection) => {
     if (!window.confirm(`Supprimer la collection "${collection.name}" ?`)) return;
     try {
       await collectionsApi.delete(collection.id);
