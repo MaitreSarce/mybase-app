@@ -27,20 +27,23 @@ Application "super app" personnelle combinant ERP, base de données, suivi finan
 - [x] Tags auto-découverts + vue détail par tag (TagsPage réécrite)
 - [x] Filtre par tag, Types de contenu personnalisés
 - [x] Liens croisés (ItemLinksManager dans dialogues)
-- [x] Collections ↔ Souhaits (collection_id sur wishlist)
 
-### Phase 5 - Fix critique Dropdown/Card interaction (28 Fév 2026)
-- [x] **Fix définitif suppression** : onClick retiré du `<Card>`, mis sur les zones de contenu uniquement
-- [x] **Pattern appliqué sur TOUTES les pages** : CollectionsPage, InventoryPage, WishlistPage, ContentPage, ProjectsPage
-- [x] **onCloseAutoFocus={(e) => e.preventDefault()}** sur tous les DropdownMenuContent
-- [x] **API /api/tags/{tag_name}/items** ajouté pour récupérer items par tag
-- [x] **Multi-sélection filtres** (composant MultiSelect)
-- [x] **Vue Carte/Tableau** (composant ViewToggle)
+### Phase 5 - Fix critique Dropdown/Card (28 Fév 2026)
+- [x] Fix définitif suppression: onClick sur zones de contenu seulement (pas sur Card)
+- [x] onCloseAutoFocus={e.preventDefault()} sur tous les DropdownMenuContent
+- [x] API /api/tags/{tag_name}/items
+
+### Phase 6 - Priorités utilisateur (28 Fév 2026)
+- [x] **Liens via dialogue** : type="button" sur tous les boutons de ItemLinksManager (empêche le form submit)
+- [x] **Liens via Carte Mentale** : onConnect handler ajouté, glisser d'un noeud à un autre crée un lien
+- [x] **3 petits points toujours visibles** : opacity-0 retiré sur TOUTES les pages (Inventory, Wishlist, Collections, Projects, Content, Portfolio)
+- [x] **Multi-sélection sur TOUS les filtres** : MultiSelect (Popover+Checkboxes) sur Inventory, Wishlist, Content, Projects, Collections, Tags
+- [x] **Types de contenu personnalisés** : Input + bouton "+" pour créer un type custom, auto-sélectionné
 
 ## Architecture
 - **Backend**: FastAPI, MongoDB (FerretDB+PostgreSQL sur RPi), JWT
 - **Frontend**: React, Shadcn/UI, TailwindCSS, Recharts, @xyflow/react
-- **Pattern Dropdown/Card**: Ne jamais mettre onClick sur le Card quand il contient un DropdownMenu. Mettre onClick sur les zones de contenu internes seulement.
+- **Pattern Card/Dropdown**: onClick sur zones de contenu internes seulement, jamais sur le Card parent
 
 ## Backlog
 
