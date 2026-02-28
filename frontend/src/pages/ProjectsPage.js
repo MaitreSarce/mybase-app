@@ -195,22 +195,18 @@ const ProjectsPage = () => {
     const progress = project.task_count > 0 ? (project.completed_tasks / project.task_count) * 100 : 0;
     return (
       <div className={depth > 0 ? 'ml-6' : ''}>
-        <Card className="bg-card border-border card-hover group cursor-pointer"
-          onClick={() => { if (!dropdownActionRef.current) handleOpenProjectDialog(project); }}
+        <Card className="bg-card border-border card-hover group"
           data-testid={`project-card-${project.id}`}>
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => handleOpenProjectDialog(project)}>
               {depth > 0 && <CornerDownRight className="h-4 w-4 text-muted-foreground" />}
               <div className={`w-3 h-3 rounded-full ${getColorClass(project.color)}`} />
               <CardTitle className="text-lg">{project.name}</CardTitle>
               {project.status !== 'active' && <Badge variant="outline" className="text-xs">{project.status}</Badge>}
             </div>
-            <DropdownMenu onOpenChange={(open) => {
-              if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
-            }}>
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={e => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -230,7 +226,7 @@ const ProjectsPage = () => {
               </DropdownMenuContent>
             </DropdownMenu>
           </CardHeader>
-          <CardContent>
+          <CardContent className="cursor-pointer" onClick={() => handleOpenProjectDialog(project)}>
             {project.description && (
               <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
             )}
