@@ -161,6 +161,12 @@ const CollectionsPage = () => {
 
   const getColorClass = (color) => COLORS.find(c => c.value === color)?.class || 'bg-blue-500';
   const tagNames = allTags.map(t => t.name);
+  const tagOpts = tagNames.map(t => ({ value: t, label: t }));
+
+  const filteredCollections = collections.filter(col => {
+    if (filterTags.length && !filterTags.some(t => col.tags?.includes(t))) return false;
+    return true;
+  });
 
   if (loading) {
     return (
