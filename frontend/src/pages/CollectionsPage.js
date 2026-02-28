@@ -243,6 +243,54 @@ const CollectionsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Item Edit Dialog */}
+        <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmitItem}>
+              <DialogHeader>
+                <DialogTitle>Modifier {editingDetailType === 'inventory' ? "l'item" : 'le souhait'}</DialogTitle>
+                <DialogDescription>Modifier les détails de cet élément</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nom *</Label>
+                  <Input value={itemFormData.name || ''} onChange={e => setItemFormData({...itemFormData, name: e.target.value})} required data-testid="detail-item-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea value={itemFormData.description || ''} onChange={e => setItemFormData({...itemFormData, description: e.target.value})} />
+                </div>
+                {editingDetailType === 'inventory' ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Prix d'achat</Label><Input type="number" step="0.01" value={itemFormData.purchase_price || ''} onChange={e => setItemFormData({...itemFormData, purchase_price: e.target.value})} /></div>
+                      <div className="space-y-2"><Label>Valeur actuelle</Label><Input type="number" step="0.01" value={itemFormData.current_value || ''} onChange={e => setItemFormData({...itemFormData, current_value: e.target.value})} /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Emplacement</Label><Input value={itemFormData.location || ''} onChange={e => setItemFormData({...itemFormData, location: e.target.value})} /></div>
+                      <div className="space-y-2"><Label>Quantité</Label><Input type="number" min="1" value={itemFormData.quantity || 1} onChange={e => setItemFormData({...itemFormData, quantity: e.target.value})} /></div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2"><Label>Prix</Label><Input type="number" step="0.01" value={itemFormData.price || ''} onChange={e => setItemFormData({...itemFormData, price: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Lien</Label><Input type="url" value={itemFormData.url || ''} onChange={e => setItemFormData({...itemFormData, url: e.target.value})} /></div>
+                  </>
+                )}
+                {editingDetailItem && (
+                  <ItemLinksManager itemType={editingDetailType} itemId={editingDetailItem.id} itemName={editingDetailItem.name} onUpdate={() => handleSelectCollection(selectedCollection)} />
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setItemDialogOpen(false)}>Annuler</Button>
+                <Button type="submit" disabled={itemSaving} data-testid="detail-item-submit">
+                  {itemSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Mettre à jour
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
