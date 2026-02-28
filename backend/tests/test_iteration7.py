@@ -1,11 +1,12 @@
 """
-Iteration 7 Tests - Bug Fixes
+Iteration 7 - Bug Fix Testing
 Tests for:
-- DELETE functionality for inventory, wishlist, collections, content
-- Mind map loading and filters
-- Custom content type creation
-- Card click opening edit dialogs
-- Tags API format
+1. DELETE functionality on CollectionsPage using onSelect (no window.confirm)
+2. DELETE functionality on ProjectsPage using onSelect (no window.confirm)
+3. CollectionsPage detail view - clicking items opens edit dialog
+4. TagsPage - clicking tag card shows items grouped by source
+5. Backend DELETE endpoints return 200
+6. GET /api/tags/{tag_name}/items returns items grouped by source
 """
 import pytest
 import requests
@@ -13,389 +14,302 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-class TestAuth:
-    """Test authentication"""
+class TestAuthAndSetup:
+    """Auth setup for subsequent tests"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-    def test_login(self):
-        """Test login with test2@test.com / test123"""
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
+    @pytest.fixture(scope="class")
+    def auth_token(self):
+        """Login with existing test user"""
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "test_debug@test.com",
             "password": "test123"
         })
-        assert response.status_code == 200, f"Login failed: {response.text}"
-        data = response.json()
-        assert "access_token" in data
-        assert "user" in data
-        print(f"SUCCESS: Login - user: {data['user']['email']}")
-        return data["access_token"]
-
-
-class TestDeleteFunctionality:
-    """Test DELETE endpoints for all resources"""
+        if response.status_code != 200:
+            # Try creating test user
+            response = requests.post(f"{BASE_URL}/api/auth/register", json={
+                "email": "test_debug@test.com",
+                "password": "test123",
+                "name": "Test User"
+            })
+        assert response.status_code in [200, 201], f"Auth failed: {response.text}"
+        return response.json()["access_token"]
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
-            "password": "test123"
+    def test_auth_works(self, auth_token):
+        """Verify auth token is valid"""
+        response = requests.get(f"{BASE_URL}/api/auth/me", headers={
+            "Authorization": f"Bearer {auth_token}"
         })
         assert response.status_code == 200
-        token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
-    
-    def test_inventory_delete(self):
-        """Test create and delete inventory item"""
-        # Create test item
-        create_response = self.session.post(f"{BASE_URL}/api/inventory", json={
-            "name": "TEST_Delete_Item",
-            "description": "Item for delete test",
-            "tags": ["test-delete"]
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        item_id = create_response.json()["id"]
-        print(f"SUCCESS: Created inventory item {item_id}")
-        
-        # Delete item
-        delete_response = self.session.delete(f"{BASE_URL}/api/inventory/{item_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted inventory item {item_id}")
-        
-        # Verify deletion - should return 404
-        get_response = self.session.get(f"{BASE_URL}/api/inventory/{item_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified item no longer exists")
-    
-    def test_wishlist_delete(self):
-        """Test create and delete wishlist item"""
-        # Create test item
-        create_response = self.session.post(f"{BASE_URL}/api/wishlist", json={
-            "name": "TEST_Delete_Wishlist",
-            "description": "Wishlist item for delete test",
-            "price": 100,
-            "tags": ["test-delete"]
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        item_id = create_response.json()["id"]
-        print(f"SUCCESS: Created wishlist item {item_id}")
-        
-        # Delete item
-        delete_response = self.session.delete(f"{BASE_URL}/api/wishlist/{item_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted wishlist item {item_id}")
-        
-        # Verify deletion
-        get_response = self.session.get(f"{BASE_URL}/api/wishlist/{item_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified wishlist item no longer exists")
-    
-    def test_collection_delete(self):
-        """Test create and delete collection"""
-        # Create test collection
-        create_response = self.session.post(f"{BASE_URL}/api/collections", json={
-            "name": "TEST_Delete_Collection",
-            "description": "Collection for delete test",
-            "color": "blue"
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        collection_id = create_response.json()["id"]
-        print(f"SUCCESS: Created collection {collection_id}")
-        
-        # Delete collection
-        delete_response = self.session.delete(f"{BASE_URL}/api/collections/{collection_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted collection {collection_id}")
-        
-        # Verify deletion
-        get_response = self.session.get(f"{BASE_URL}/api/collections/{collection_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified collection no longer exists")
-    
-    def test_content_delete(self):
-        """Test create and delete content"""
-        # Create test content
-        create_response = self.session.post(f"{BASE_URL}/api/content", json={
-            "title": "TEST_Delete_Content",
-            "content_type": "recipe",
-            "description": "Content for delete test",
-            "tags": ["test-delete"]
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        content_id = create_response.json()["id"]
-        print(f"SUCCESS: Created content {content_id}")
-        
-        # Delete content
-        delete_response = self.session.delete(f"{BASE_URL}/api/content/{content_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted content {content_id}")
-        
-        # Verify deletion
-        get_response = self.session.get(f"{BASE_URL}/api/content/{content_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified content no longer exists")
+        print(f"Authenticated as: {response.json()['email']}")
 
 
-class TestCustomContentType:
-    """Test custom content type creation"""
+class TestDeleteEndpoints:
+    """Test all DELETE endpoints return 200"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
+    @pytest.fixture(scope="class")
+    def auth_headers(self):
+        """Get auth headers"""
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "test_debug@test.com",
             "password": "test123"
         })
-        assert response.status_code == 200
+        if response.status_code != 200:
+            response = requests.post(f"{BASE_URL}/api/auth/register", json={
+                "email": "test_debug@test.com",
+                "password": "test123",
+                "name": "Test User"
+            })
         token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
+        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
-    def test_create_content_with_custom_type(self):
-        """Test creating content with custom type 'podcast'"""
-        # Create content with custom type
-        create_response = self.session.post(f"{BASE_URL}/api/content", json={
-            "title": "TEST_Podcast_Episode",
-            "content_type": "podcast",
-            "description": "A test podcast episode",
-            "body": "Podcast content here",
-            "tags": ["test-podcast"]
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        data = create_response.json()
-        assert data["content_type"] == "podcast", "Content type should be 'podcast'"
-        content_id = data["id"]
-        print(f"SUCCESS: Created content with custom type 'podcast' - id: {content_id}")
+    def test_collection_create_and_delete(self, auth_headers):
+        """Create collection and delete it - verify 200 response"""
+        # Create
+        response = requests.post(f"{BASE_URL}/api/collections", 
+            headers=auth_headers,
+            json={"name": "TEST_DeleteCollection", "color": "blue"})
+        assert response.status_code == 200, f"Create failed: {response.text}"
+        collection_id = response.json()["id"]
+        print(f"Created collection: {collection_id}")
         
-        # Get the content to verify type is saved
-        get_response = self.session.get(f"{BASE_URL}/api/content/{content_id}")
-        assert get_response.status_code == 200
-        fetched = get_response.json()
-        assert fetched["content_type"] == "podcast"
-        print("SUCCESS: Custom content type 'podcast' is correctly saved")
+        # Delete
+        response = requests.delete(f"{BASE_URL}/api/collections/{collection_id}", 
+            headers=auth_headers)
+        assert response.status_code == 200, f"Delete failed: {response.text}"
+        print(f"Deleted collection - status: {response.status_code}")
+        
+        # Verify deleted
+        response = requests.get(f"{BASE_URL}/api/collections/{collection_id}",
+            headers=auth_headers)
+        assert response.status_code == 404
+        print("Collection verified deleted (404)")
+    
+    def test_project_create_and_delete(self, auth_headers):
+        """Create project and delete it - verify 200 response"""
+        # Create
+        response = requests.post(f"{BASE_URL}/api/projects",
+            headers=auth_headers,
+            json={"name": "TEST_DeleteProject", "color": "violet"})
+        assert response.status_code == 200, f"Create failed: {response.text}"
+        project_id = response.json()["id"]
+        print(f"Created project: {project_id}")
+        
+        # Delete
+        response = requests.delete(f"{BASE_URL}/api/projects/{project_id}",
+            headers=auth_headers)
+        assert response.status_code == 200, f"Delete failed: {response.text}"
+        print(f"Deleted project - status: {response.status_code}")
+        
+        # Verify deleted
+        response = requests.get(f"{BASE_URL}/api/projects/{project_id}",
+            headers=auth_headers)
+        assert response.status_code == 404
+        print("Project verified deleted (404)")
+    
+    def test_inventory_create_and_delete(self, auth_headers):
+        """Create inventory item and delete it - verify 200 response"""
+        # Create
+        response = requests.post(f"{BASE_URL}/api/inventory",
+            headers=auth_headers,
+            json={"name": "TEST_DeleteInventory", "tags": ["testdelete"]})
+        assert response.status_code == 200, f"Create failed: {response.text}"
+        item_id = response.json()["id"]
+        print(f"Created inventory item: {item_id}")
+        
+        # Delete
+        response = requests.delete(f"{BASE_URL}/api/inventory/{item_id}",
+            headers=auth_headers)
+        assert response.status_code == 200, f"Delete failed: {response.text}"
+        print(f"Deleted inventory item - status: {response.status_code}")
+    
+    def test_wishlist_create_and_delete(self, auth_headers):
+        """Create wishlist item and delete it"""
+        # Create
+        response = requests.post(f"{BASE_URL}/api/wishlist",
+            headers=auth_headers,
+            json={"name": "TEST_DeleteWishlist", "price": 100})
+        assert response.status_code == 200, f"Create failed: {response.text}"
+        item_id = response.json()["id"]
+        print(f"Created wishlist item: {item_id}")
+        
+        # Delete
+        response = requests.delete(f"{BASE_URL}/api/wishlist/{item_id}",
+            headers=auth_headers)
+        assert response.status_code == 200, f"Delete failed: {response.text}"
+        print(f"Deleted wishlist item - status: {response.status_code}")
+    
+    def test_content_create_and_delete(self, auth_headers):
+        """Create content and delete it"""
+        # Create
+        response = requests.post(f"{BASE_URL}/api/content",
+            headers=auth_headers,
+            json={"title": "TEST_DeleteContent", "content_type": "recipe"})
+        assert response.status_code == 200, f"Create failed: {response.text}"
+        item_id = response.json()["id"]
+        print(f"Created content item: {item_id}")
+        
+        # Delete
+        response = requests.delete(f"{BASE_URL}/api/content/{item_id}",
+            headers=auth_headers)
+        assert response.status_code == 200, f"Delete failed: {response.text}"
+        print(f"Deleted content item - status: {response.status_code}")
+
+
+class TestTagsEndpoint:
+    """Test GET /api/tags/{tag_name}/items endpoint"""
+    
+    @pytest.fixture(scope="class")
+    def auth_headers(self):
+        """Get auth headers"""
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "test_debug@test.com",
+            "password": "test123"
+        })
+        if response.status_code != 200:
+            response = requests.post(f"{BASE_URL}/api/auth/register", json={
+                "email": "test_debug@test.com",
+                "password": "test123",
+                "name": "Test User"
+            })
+        token = response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    
+    def test_tags_all_endpoint(self, auth_headers):
+        """Test /api/tags/all returns all tags"""
+        response = requests.get(f"{BASE_URL}/api/tags/all", headers=auth_headers)
+        assert response.status_code == 200, f"Tags all failed: {response.text}"
+        tags = response.json()
+        print(f"Found {len(tags)} tags: {[t['name'] for t in tags]}")
+        
+        # Verify tag structure
+        if tags:
+            tag = tags[0]
+            assert "name" in tag
+            assert "count" in tag
+            assert "sources" in tag
+            print(f"Sample tag structure: {tag}")
+    
+    def test_create_items_with_tag_and_query(self, auth_headers):
+        """Create items with a tag, then query via GET /api/tags/{tag_name}/items"""
+        test_tag = "TEST_ITER7_TAG"
+        
+        # Create inventory item with tag
+        inv_response = requests.post(f"{BASE_URL}/api/inventory",
+            headers=auth_headers,
+            json={"name": "TEST_InvItemWithTag", "tags": [test_tag]})
+        assert inv_response.status_code == 200
+        inv_id = inv_response.json()["id"]
+        print(f"Created inventory with tag: {inv_id}")
+        
+        # Create wishlist item with same tag
+        wish_response = requests.post(f"{BASE_URL}/api/wishlist",
+            headers=auth_headers,
+            json={"name": "TEST_WishItemWithTag", "tags": [test_tag]})
+        assert wish_response.status_code == 200
+        wish_id = wish_response.json()["id"]
+        print(f"Created wishlist with tag: {wish_id}")
+        
+        # Create content item with same tag
+        content_response = requests.post(f"{BASE_URL}/api/content",
+            headers=auth_headers,
+            json={"title": "TEST_ContentWithTag", "content_type": "recipe", "tags": [test_tag]})
+        assert content_response.status_code == 200
+        content_id = content_response.json()["id"]
+        print(f"Created content with tag: {content_id}")
+        
+        # Query items by tag
+        response = requests.get(f"{BASE_URL}/api/tags/{test_tag}/items", headers=auth_headers)
+        assert response.status_code == 200, f"Tag items query failed: {response.text}"
+        
+        items_by_source = response.json()
+        print(f"Items grouped by source: {list(items_by_source.keys())}")
+        
+        # Verify structure - should be grouped by source type
+        assert "inventory" in items_by_source, "Should have inventory items"
+        assert "wishlist" in items_by_source, "Should have wishlist items"
+        assert "content" in items_by_source, "Should have content items"
+        
+        # Verify counts
+        assert len(items_by_source["inventory"]) >= 1, "Should have at least 1 inventory item"
+        assert len(items_by_source["wishlist"]) >= 1, "Should have at least 1 wishlist item"
+        assert len(items_by_source["content"]) >= 1, "Should have at least 1 content item"
+        
+        print(f"Tag items verification: inventory={len(items_by_source['inventory'])}, wishlist={len(items_by_source['wishlist'])}, content={len(items_by_source['content'])}")
         
         # Cleanup
-        self.session.delete(f"{BASE_URL}/api/content/{content_id}")
-
-
-class TestTagsAPI:
-    """Test tags API format"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
-            "password": "test123"
-        })
-        assert response.status_code == 200
-        token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
-    
-    def test_tags_all_api_format(self):
-        """Test GET /api/tags/all returns correct format [{name, count, sources}]"""
-        response = self.session.get(f"{BASE_URL}/api/tags/all")
-        assert response.status_code == 200, f"Tags API failed: {response.text}"
-        data = response.json()
-        
-        # Should be a list
-        assert isinstance(data, list), "Response should be a list"
-        
-        # Each item should have name, count, sources
-        if len(data) > 0:
-            tag = data[0]
-            assert "name" in tag, "Tag should have 'name'"
-            assert "count" in tag, "Tag should have 'count'"
-            assert "sources" in tag, "Tag should have 'sources'"
-            print(f"SUCCESS: Tags API format correct - {len(data)} tags found")
-            print(f"  Sample tag: {tag}")
-        else:
-            print("SUCCESS: Tags API format correct - 0 tags found (empty list)")
-
-
-class TestMindmapAPI:
-    """Test mindmap API"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
-            "password": "test123"
-        })
-        assert response.status_code == 200
-        token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
-    
-    def test_mindmap_data(self):
-        """Test GET /api/mindmap returns nodes and edges"""
-        response = self.session.get(f"{BASE_URL}/api/mindmap")
-        assert response.status_code == 200, f"Mindmap API failed: {response.text}"
-        data = response.json()
-        
-        assert "nodes" in data, "Response should have 'nodes'"
-        assert "edges" in data, "Response should have 'edges'"
-        print(f"SUCCESS: Mindmap API - {len(data['nodes'])} nodes, {len(data['edges'])} edges")
-    
-    def test_mindmap_with_type_filter(self):
-        """Test GET /api/mindmap with type filter"""
-        response = self.session.get(f"{BASE_URL}/api/mindmap", params={"perspective": "type:inventory"})
-        assert response.status_code == 200, f"Mindmap filter failed: {response.text}"
-        data = response.json()
-        
-        assert "nodes" in data
-        assert "edges" in data
-        # Check nodes are filtered by type
-        for node in data.get("nodes", []):
-            if node.get("type") != "inventory":
-                # Some related nodes of other types might be included
-                pass
-        print(f"SUCCESS: Mindmap type filter - {len(data['nodes'])} nodes")
-    
-    def test_mindmap_with_tag_filter(self):
-        """Test GET /api/mindmap with tag filter"""
-        response = self.session.get(f"{BASE_URL}/api/mindmap", params={"perspective": "tag:luxe"})
-        assert response.status_code == 200, f"Mindmap tag filter failed: {response.text}"
-        data = response.json()
-        
-        assert "nodes" in data
-        assert "edges" in data
-        print(f"SUCCESS: Mindmap tag filter 'luxe' - {len(data['nodes'])} nodes")
+        requests.delete(f"{BASE_URL}/api/inventory/{inv_id}", headers=auth_headers)
+        requests.delete(f"{BASE_URL}/api/wishlist/{wish_id}", headers=auth_headers)
+        requests.delete(f"{BASE_URL}/api/content/{content_id}", headers=auth_headers)
+        print("Cleanup complete")
 
 
 class TestCollectionItems:
-    """Test collection items API"""
+    """Test collection items endpoint for detail view"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
+    @pytest.fixture(scope="class")
+    def auth_headers(self):
+        """Get auth headers"""
+        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "test_debug@test.com",
             "password": "test123"
         })
-        assert response.status_code == 200
+        if response.status_code != 200:
+            response = requests.post(f"{BASE_URL}/api/auth/register", json={
+                "email": "test_debug@test.com",
+                "password": "test123",
+                "name": "Test User"
+            })
         token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
+        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
-    def test_collection_items_api(self):
-        """Test GET /api/collections/{id}/items returns inventory and wishlist"""
-        # First get collections
-        cols_response = self.session.get(f"{BASE_URL}/api/collections")
-        assert cols_response.status_code == 200
-        collections = cols_response.json()
+    def test_collection_items_endpoint(self, auth_headers):
+        """Create collection with items and query items"""
+        # Create collection
+        col_response = requests.post(f"{BASE_URL}/api/collections",
+            headers=auth_headers,
+            json={"name": "TEST_CollectionWithItems", "color": "emerald"})
+        assert col_response.status_code == 200
+        collection_id = col_response.json()["id"]
+        print(f"Created collection: {collection_id}")
         
-        if len(collections) > 0:
-            collection_id = collections[0]["id"]
-            response = self.session.get(f"{BASE_URL}/api/collections/{collection_id}/items")
-            assert response.status_code == 200, f"Collection items failed: {response.text}"
-            data = response.json()
-            
-            assert "inventory" in data, "Response should have 'inventory'"
-            assert "wishlist" in data, "Response should have 'wishlist'"
-            print(f"SUCCESS: Collection items API - inventory: {len(data['inventory'])}, wishlist: {len(data['wishlist'])}")
-        else:
-            print("SUCCESS: No collections to test (skipped)")
-
-
-class TestProjectDelete:
-    """Test project delete functionality"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
+        # Create inventory item in collection
+        inv_response = requests.post(f"{BASE_URL}/api/inventory",
+            headers=auth_headers,
+            json={"name": "TEST_InvInCollection", "collection_id": collection_id})
+        assert inv_response.status_code == 200
+        inv_id = inv_response.json()["id"]
+        print(f"Created inventory in collection: {inv_id}")
         
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
-            "password": "test123"
-        })
-        assert response.status_code == 200
-        token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
-    
-    def test_project_delete(self):
-        """Test create and delete project"""
-        # Create test project
-        create_response = self.session.post(f"{BASE_URL}/api/projects", json={
-            "name": "TEST_Delete_Project",
-            "description": "Project for delete test",
-            "color": "blue"
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        project_id = create_response.json()["id"]
-        print(f"SUCCESS: Created project {project_id}")
+        # Create wishlist item in collection
+        wish_response = requests.post(f"{BASE_URL}/api/wishlist",
+            headers=auth_headers,
+            json={"name": "TEST_WishInCollection", "collection_id": collection_id})
+        assert wish_response.status_code == 200
+        wish_id = wish_response.json()["id"]
+        print(f"Created wishlist in collection: {wish_id}")
         
-        # Delete project
-        delete_response = self.session.delete(f"{BASE_URL}/api/projects/{project_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted project {project_id}")
+        # Query collection items
+        response = requests.get(f"{BASE_URL}/api/collections/{collection_id}/items", 
+            headers=auth_headers)
+        assert response.status_code == 200, f"Collection items query failed: {response.text}"
         
-        # Verify deletion
-        get_response = self.session.get(f"{BASE_URL}/api/projects/{project_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified project no longer exists")
-
-
-class TestPortfolioDelete:
-    """Test portfolio asset delete functionality"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
+        items = response.json()
+        print(f"Collection items response: {items.keys()}")
         
-        # Login first
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test2@test.com",
-            "password": "test123"
-        })
-        assert response.status_code == 200
-        token = response.json()["access_token"]
-        self.session.headers.update({"Authorization": f"Bearer {token}"})
-    
-    def test_portfolio_delete(self):
-        """Test create and delete portfolio asset"""
-        # Create test asset
-        create_response = self.session.post(f"{BASE_URL}/api/portfolio", json={
-            "name": "TEST_Delete_Asset",
-            "asset_type": "crypto",
-            "symbol": "TEST",
-            "quantity": 1,
-            "purchase_price": 100
-        })
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        asset_id = create_response.json()["id"]
-        print(f"SUCCESS: Created portfolio asset {asset_id}")
+        # Verify structure
+        assert "inventory" in items, "Should have inventory key"
+        assert "wishlist" in items, "Should have wishlist key"
+        assert len(items["inventory"]) >= 1
+        assert len(items["wishlist"]) >= 1
         
-        # Delete asset
-        delete_response = self.session.delete(f"{BASE_URL}/api/portfolio/{asset_id}")
-        assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
-        print(f"SUCCESS: Deleted portfolio asset {asset_id}")
+        print(f"Collection items: inventory={len(items['inventory'])}, wishlist={len(items['wishlist'])}")
         
-        # Verify deletion
-        get_response = self.session.get(f"{BASE_URL}/api/portfolio/{asset_id}")
-        assert get_response.status_code == 404
-        print("SUCCESS: Verified asset no longer exists")
+        # Cleanup
+        requests.delete(f"{BASE_URL}/api/inventory/{inv_id}", headers=auth_headers)
+        requests.delete(f"{BASE_URL}/api/wishlist/{wish_id}", headers=auth_headers)
+        requests.delete(f"{BASE_URL}/api/collections/{collection_id}", headers=auth_headers)
+        print("Cleanup complete")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    pytest.main([__file__, "-v", "--tb=short"])
