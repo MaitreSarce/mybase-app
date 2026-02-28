@@ -42,6 +42,7 @@ const InventoryPage = () => {
     name: '', description: '', collection_id: '', tags: [], metadata: [],
     purchase_price: '', current_value: '', purchase_date: '', location: '', condition: '', quantity: 1
   });
+  const dropdownActionRef = useRef(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -163,13 +164,15 @@ const InventoryPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map(item => (
             <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer"
-              onClick={() => handleOpenDialog(item)} data-testid={`inventory-card-${item.id}`}>
+              onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`inventory-card-${item.id}`}>
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex-1 min-w-0">
                   <CardTitle className="text-lg truncate">{item.name}</CardTitle>
                   {item.quantity > 1 && <Badge variant="outline" className="mt-1 font-mono">x{item.quantity}</Badge>}
                 </div>
-                <DropdownMenu>
+                <DropdownMenu onOpenChange={(open) => {
+                  if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+                }}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={e => e.stopPropagation()}>
