@@ -69,6 +69,46 @@ const MindmapPage = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rawData, setRawData] = useState({ nodes: [], edges: [] });
+  const [connecting, setConnecting] = useState(false);
+
+  // Map node id -> type for link creation
+  const nodeTypeMap = useMemo(() => {
+    const map = {};
+    rawData.nodes.forEach(n => { map[n.id] = n.type; });
+    return map;
+  }, [rawData.nodes]);
+
+  const handleConnect = useCallback(async (connection) => {
+    const sourceType = nodeTypeMap[connection.source];
+    const targetType = nodeTypeMap[connection.target];
+    if (!sourceType || !targetType) return;
+    setConnecting(true);
+    try {
+      await linksApi.create({
+        source_type: sourceType,
+        source_id: connection.source,
+        target_type: targetType,
+        target_id: connection.target,
+      });
+      toast.success('Lien créé');
+      fetchData(perspective);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erreur lors de la création du lien');
+    } finally { setConnecting(false); }
+  }, [nodeTypeMap, fetchData, perspective]);
+
+  const handleEdgesDelete = useCallback(async (deletedEdges) => {
+    for (const edge of deletedEdges) {
+      const sourceType = nodeTypeMap[edge.source];
+      const targetType = nodeTypeMap[edge.target];
+      if (!sourceType || !targetType) continue;
+      try {
+        await linksApi.delete(sourceType, edge.source, targetType, edge.target);
+        toast.success('Lien supprimé');
+      } catch { toast.error('Erreur lors de la suppression du lien'); }
+    }
+    fetchData(perspective);
+  }, [nodeTypeMap, fetchData, perspective]);
 
   const fetchData = useCallback(async (persp) => {
     try {
