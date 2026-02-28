@@ -213,13 +213,15 @@ const InventoryPage = () => {
             </TableHeader>
             <TableBody>
               {filteredItems.map(item => (
-                <TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => handleOpenDialog(item)} data-testid={`inventory-row-${item.id}`}>
+                <TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`inventory-row-${item.id}`}>
                   <TableCell className="font-medium">{item.name}{item.quantity > 1 ? ` (x${item.quantity})` : ''}</TableCell>
                   <TableCell className="font-mono">{fmt(item.current_value || item.purchase_price)}</TableCell>
                   <TableCell>{item.condition && <Badge variant="outline" className="capitalize text-xs">{item.condition}</Badge>}</TableCell>
                   <TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
                   <TableCell>
-                    <DropdownMenu>
+                    <DropdownMenu onOpenChange={(open) => {
+                      if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+                    }}>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}>
                           <MoreVertical className="h-4 w-4" />
