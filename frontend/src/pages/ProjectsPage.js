@@ -208,21 +208,22 @@ const ProjectsPage = () => {
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={e => e.stopPropagation()}>
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleOpenTaskDialog(null, project.id)}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenTaskDialog(null, project.id); }}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleOpenProjectDialog(null, project.id)}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenProjectDialog(null, project.id); }}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter un sous-projet
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleOpenProjectDialog(project)}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenProjectDialog(project); }}>
                   <Pencil className="h-4 w-4 mr-2" />Modifier
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDeleteProject(project)} className="text-destructive">
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteProject(project); }} className="text-destructive">
                   <Trash2 className="h-4 w-4 mr-2" />Supprimer
                 </DropdownMenuItem>
               </DropdownMenuContent>
