@@ -23,6 +23,8 @@ import {
   Package, Heart, ArrowLeft, X
 } from 'lucide-react';
 import ItemLinksManager from '../components/ItemLinksManager';
+import { ViewToggle } from '../components/ViewToggle';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const COLORS = [
   { value: 'blue', label: 'Bleu', class: 'bg-blue-500' },
