@@ -54,6 +54,8 @@ const ProjectsPage = () => {
   const [saving, setSaving] = useState(false);
   const [selectedProject, setSelectedProject] = useState('all');
   const [showCompleted, setShowCompleted] = useState(false);
+  const [allTags, setAllTags] = useState([]);
+  const [filterTag, setFilterTag] = useState('all');
 
   const [projectForm, setProjectForm] = useState({
     name: '', description: '', color: 'blue', parent_id: '', tags: []
