@@ -2247,6 +2247,55 @@ async def get_storage_usage(user: dict = Depends(get_current_user)):
         "total_disk_files": disk_count
     }
 
+
+@api_router.get("/calendar/events")
+async def get_calendar_events(user: dict = Depends(get_current_user)):
+    """Get all items with dates for calendar view"""
+    user_id = user["id"]
+    events = []
+
+    # Inventory - purchase_date, created_at
+    items = await db.inventory.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    for item in items:
+        date = item.get("purchase_date") or item.get("created_at", "")
+        if date:
+            events.append({"id": item["id"], "title": item.get("name", ""), "date": date[:10],
+                          "type": "inventory", "tags": item.get("tags", [])})
+
+    # Wishlist - target_date, created_at
+    items = await db.wishlist.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    for item in items:
+        date = item.get("target_date") or item.get("created_at", "")
+        if date:
+            events.append({"id": item["id"], "title": item.get("name", ""), "date": date[:10],
+                          "type": "wishlist", "tags": item.get("tags", [])})
+
+    # Tasks - due_date, created_at
+    items = await db.tasks.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    for item in items:
+        date = item.get("due_date") or item.get("created_at", "")
+        if date:
+            events.append({"id": item["id"], "title": item.get("title", ""), "date": date[:10],
+                          "type": "tasks", "tags": item.get("tags", []), "completed": item.get("completed", False)})
+
+    # Content - created_at
+    items = await db.content.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    for item in items:
+        date = item.get("created_at", "")
+        if date:
+            events.append({"id": item["id"], "title": item.get("title", ""), "date": date[:10],
+                          "type": "content", "tags": item.get("tags", [])})
+
+    # Projects - created_at
+    items = await db.projects.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    for item in items:
+        date = item.get("created_at", "")
+        if date:
+            events.append({"id": item["id"], "title": item.get("name", ""), "date": date[:10],
+                          "type": "projects", "tags": item.get("tags", [])})
+
+    return events
+
 # Include the router in the main app (again for new routes)
 app.include_router(api_router)
 
