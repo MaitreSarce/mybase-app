@@ -146,7 +146,7 @@ const WishlistPage = () => {
             const pi = getPriorityInfo(item.priority); const col = collections.find(c => c.id === item.collection_id);
             return (
               <Card key={item.id} className={`bg-card border-border card-hover group cursor-pointer ${item.purchased ? 'opacity-60' : ''}`}
-                onClick={() => handleOpenDialog(item)} data-testid={`wishlist-card-${item.id}`}>
+                onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`wishlist-card-${item.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <button onClick={(e) => handleTogglePurchased(e, item)}
@@ -161,7 +161,9 @@ const WishlistPage = () => {
                       </div>
                     </div>
                   </div>
-                  <DropdownMenu>
+                  <DropdownMenu onOpenChange={(open) => {
+                    if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+                  }}>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
