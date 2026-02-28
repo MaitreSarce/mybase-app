@@ -148,23 +148,21 @@ const ContentPage = () => {
           {filteredItems.map(item => {
             const ti = getTypeInfo(item.content_type); const TIcon = ti.icon;
             return (
-              <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer" onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`content-card-${item.id}`}>
+              <Card key={item.id} className="bg-card border-border card-hover group" data-testid={`content-card-${item.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => handleOpenDialog(item)}>
                     <TIcon className={`h-5 w-5 ${ti.color} flex-shrink-0`} />
                     <div className="flex-1 min-w-0"><CardTitle className="text-lg truncate">{item.title}</CardTitle><Badge variant="outline" className="mt-1 text-xs">{ti.label}</Badge></div>
                   </div>
-                  <DropdownMenu onOpenChange={(open) => {
-                    if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
-                  }}>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
                   {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
                   {item.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{item.tags.slice(0, 3).map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}</div>}
                 </CardContent>
