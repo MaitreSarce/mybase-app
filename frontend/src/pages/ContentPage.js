@@ -100,8 +100,7 @@ const ContentPage = () => {
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (e, item) => {
-    e.stopPropagation();
+  const handleDelete = async (item) => {
     if (!window.confirm(`Supprimer "${item.title}" ?`)) return;
     try {
       await contentApi.delete(item.id);
