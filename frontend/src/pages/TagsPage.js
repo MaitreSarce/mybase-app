@@ -38,7 +38,7 @@ const apiMap = {
 const TagsPage = () => {
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterSource, setFilterSource] = useState('all');
+  const [filterSources, setFilterSources] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [tagItems, setTagItems] = useState(null);
   const [tagItemsLoading, setTagItemsLoading] = useState(false);
