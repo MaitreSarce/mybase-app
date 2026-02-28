@@ -274,7 +274,7 @@ const MindmapPage = () => {
       )}
 
       <p className="text-xs text-muted-foreground text-center">
-        {rawData.nodes.length} éléments, {rawData.edges.length} connexions
+        {rawData.nodes.length} éléments, {rawData.edges.length} connexions — Glissez d'un point à un autre pour créer un lien
       </p>
     </div>
   );
