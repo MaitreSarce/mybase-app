@@ -51,6 +51,7 @@ const CollectionsPage = () => {
   const [editingDetailType, setEditingDetailType] = useState(null);
   const [itemSaving, setItemSaving] = useState(false);
   const [itemFormData, setItemFormData] = useState({});
+  const [view, setView] = useState('card');
   const [formData, setFormData] = useState({
     name: '', description: '', category: '', color: 'blue', metadata_schema: []
   });
