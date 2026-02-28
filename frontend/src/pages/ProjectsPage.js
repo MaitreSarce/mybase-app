@@ -196,7 +196,7 @@ const ProjectsPage = () => {
     return (
       <div className={depth > 0 ? 'ml-6' : ''}>
         <Card className="bg-card border-border card-hover group cursor-pointer"
-          onClick={() => handleOpenProjectDialog(project)}
+          onClick={() => { if (!dropdownActionRef.current) handleOpenProjectDialog(project); }}
           data-testid={`project-card-${project.id}`}>
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="flex items-center gap-3">
