@@ -148,13 +148,15 @@ const ContentPage = () => {
           {filteredItems.map(item => {
             const ti = getTypeInfo(item.content_type); const TIcon = ti.icon;
             return (
-              <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer" onClick={() => handleOpenDialog(item)} data-testid={`content-card-${item.id}`}>
+              <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer" onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`content-card-${item.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <TIcon className={`h-5 w-5 ${ti.color} flex-shrink-0`} />
                     <div className="flex-1 min-w-0"><CardTitle className="text-lg truncate">{item.title}</CardTitle><Badge variant="outline" className="mt-1 text-xs">{ti.label}</Badge></div>
                   </div>
-                  <DropdownMenu>
+                  <DropdownMenu onOpenChange={(open) => {
+                    if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+                  }}>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
