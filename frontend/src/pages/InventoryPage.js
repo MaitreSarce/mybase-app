@@ -163,19 +163,15 @@ const InventoryPage = () => {
       ) : view === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map(item => (
-            <Card key={item.id} className="bg-card border-border card-hover group cursor-pointer"
-              onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }} data-testid={`inventory-card-${item.id}`}>
+            <Card key={item.id} className="bg-card border-border card-hover group" data-testid={`inventory-card-${item.id}`}>
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleOpenDialog(item)}>
                   <CardTitle className="text-lg truncate">{item.name}</CardTitle>
                   {item.quantity > 1 && <Badge variant="outline" className="mt-1 font-mono">x{item.quantity}</Badge>}
                 </div>
-                <DropdownMenu onOpenChange={(open) => {
-                  if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
-                }}>
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={e => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -189,7 +185,7 @@ const InventoryPage = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </CardHeader>
-              <CardContent>
+              <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
                 {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Valeur</span>
