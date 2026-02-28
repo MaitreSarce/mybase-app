@@ -7,7 +7,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://life-hub-20.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://unified-dashboard-24.preview.emergentagent.com').rstrip('/')
 
 # ==================== FIXTURES ====================
 

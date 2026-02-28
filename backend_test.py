@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class MyBaseAPITester:
-    def __init__(self, base_url: str = "https://life-hub-20.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://unified-dashboard-24.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.user_id = None
