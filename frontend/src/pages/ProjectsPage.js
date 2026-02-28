@@ -64,6 +64,7 @@ const ProjectsPage = () => {
   const [taskForm, setTaskForm] = useState({
     title: '', description: '', project_id: '', due_date: '', priority: 3, tags: []
   });
+  const dropdownActionRef = useRef(false);
 
   useEffect(() => { fetchData(); }, []);
 
