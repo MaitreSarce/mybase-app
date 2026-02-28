@@ -205,6 +205,7 @@ const ContentPage = () => {
               </div>
               <div className="space-y-2"><Label>Description</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
               <div className="space-y-2"><Label>Contenu</Label><Textarea value={formData.body} onChange={e => setFormData({...formData, body: e.target.value})} rows={6} placeholder="Contenu complet..." /></div>
+              <div className="space-y-2"><Label>Lien / URL source</Label><Input type="url" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} placeholder="https://..." data-testid="content-url-input" /></div>
               <div className="space-y-2"><Label>Catégorie</Label><Input value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Cuisine, Électronique..." /></div>
               <div className="space-y-2"><Label>Tags</Label>
                 <div className="flex gap-2"><Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
