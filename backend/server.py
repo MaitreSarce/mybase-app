@@ -296,6 +296,7 @@ class ContentCreate(BaseModel):
     content_type: str  # recipe, diy, tutorial, educational
     description: Optional[str] = None
     body: Optional[str] = None  # Markdown content
+    url: Optional[str] = None
     tags: List[str] = []
     metadata: List[MetadataField] = []
     links: List[ItemLink] = []
@@ -306,6 +307,7 @@ class ContentUpdate(BaseModel):
     content_type: Optional[str] = None
     description: Optional[str] = None
     body: Optional[str] = None
+    url: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[List[MetadataField]] = None
     links: Optional[List[ItemLink]] = None
@@ -319,6 +321,7 @@ class ContentResponse(BaseModel):
     content_type: str
     description: Optional[str] = None
     body: Optional[str] = None
+    url: Optional[str] = None
     tags: List[str] = []
     metadata: List[Dict[str, Any]] = []
     links: List[Dict[str, Any]] = []
