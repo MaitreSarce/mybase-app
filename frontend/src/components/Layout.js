@@ -47,6 +47,7 @@ const navItems = [
   { path: '/alerts', label: 'Alertes', icon: Bell },
   { path: '/tags', label: 'Tags', icon: Hash },
   { path: '/mindmap', label: 'Carte Mentale', icon: Network },
+  { path: '/calendar', label: 'Calendrier', icon: CalendarDays },
 ];
 
 const Layout = () => {
