@@ -164,6 +164,7 @@ const ContentPage = () => {
                 </CardHeader>
                 <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
                   {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
+                  {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"><ExternalLink className="h-3 w-3" />{item.url.replace(/^https?:\/\//, '').substring(0, 40)}</a>}
                   {item.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{item.tags.slice(0, 3).map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}</div>}
                 </CardContent>
               </Card>
