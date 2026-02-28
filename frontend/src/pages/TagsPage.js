@@ -209,17 +209,7 @@ const TagsPage = () => {
             {tags.length} tags utilises dans vos elements
           </p>
         </div>
-        <Select value={filterSource} onValueChange={setFilterSource}>
-          <SelectTrigger className="w-[180px]" data-testid="tags-filter-source">
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les sources</SelectItem>
-            {Object.entries(SOURCE_LABELS).map(([k, v]) => (
-              <SelectItem key={k} value={k}>{v.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {sourceOpts.length > 0 && <MultiSelect options={sourceOpts} selected={filterSources} onChange={setFilterSources} placeholder="Sources" testId="tags-filter-source" />}
       </div>
 
       {filtered.length === 0 ? (
