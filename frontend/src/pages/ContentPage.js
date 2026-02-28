@@ -51,6 +51,7 @@ const ContentPage = () => {
   const [formData, setFormData] = useState({
     title: '', content_type: 'recipe', description: '', body: '', tags: [], category: ''
   });
+  const dropdownActionRef = useRef(false);
 
   useEffect(() => { fetchData(); }, []);
 
