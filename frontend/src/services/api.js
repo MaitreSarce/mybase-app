@@ -104,9 +104,9 @@ export const searchApi = {
   search: (q) => api.get('/search', { params: { q } }),
 };
 
-// Tags API
+// Tags API (auto-discover from all items)
 export const tagsApi = {
-  getAll: () => api.get('/tags'),
+  getAll: () => api.get('/tags/all'),
 };
 
 // Upload API
