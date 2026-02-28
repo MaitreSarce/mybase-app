@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectsApi, tasksApi } from '../services/api';
+import { projectsApi, tasksApi, tagsApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -11,7 +11,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Checkbox } from '../components/ui/checkbox';
 import { Progress } from '../components/ui/progress';
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -22,8 +22,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Plus, MoreVertical, Pencil, Trash2, FolderKanban, Loader2,
-  CheckCircle2, Circle, Calendar, ChevronRight, CornerDownRight,
+  CheckCircle2, Circle, Calendar, CornerDownRight,
 } from 'lucide-react';
+import ItemLinksManager from '../components/ItemLinksManager';
 
 const COLORS = [
   { value: 'blue', label: 'Bleu', class: 'bg-blue-500' },
