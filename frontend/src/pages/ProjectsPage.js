@@ -72,8 +72,11 @@ const ProjectsPage = () => {
       const [projectsRes, tasksRes] = await Promise.all([
         projectsApi.getAll(), tasksApi.getAll()
       ]);
+      let tagsRes;
+      try { tagsRes = await tagsApi.getAll(); } catch { tagsRes = { data: [] }; }
       setProjects(projectsRes.data);
       setTasks(tasksRes.data);
+      setAllTags(tagsRes.data || []);
     } catch { toast.error('Erreur lors du chargement'); }
     finally { setLoading(false); }
   };
