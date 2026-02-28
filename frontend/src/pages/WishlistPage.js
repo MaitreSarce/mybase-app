@@ -187,12 +187,12 @@ const WishlistPage = () => {
           <Table><TableHeader><TableRow><TableHead>Nom</TableHead><TableHead>Prix</TableHead><TableHead>Priorité</TableHead><TableHead>Collection</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
             <TableBody>{filteredItems.map(item => {
               const pi = getPriorityInfo(item.priority); const col = collections.find(c => c.id === item.collection_id);
-              return (<TableRow key={item.id} className={`cursor-pointer hover:bg-secondary/30 ${item.purchased ? 'opacity-60' : ''}`} onClick={() => handleOpenDialog(item)}>
+              return (<TableRow key={item.id} className={`cursor-pointer hover:bg-secondary/30 ${item.purchased ? 'opacity-60' : ''}`} onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
                 <TableCell className="font-medium">{item.purchased ? <span className="line-through">{item.name}</span> : item.name}</TableCell>
                 <TableCell className="font-mono">{fmt(item.price)}</TableCell>
                 <TableCell><div className="flex items-center gap-1"><div className={`w-2 h-2 rounded-full ${pi.color}`} />{pi.label}</div></TableCell>
                 <TableCell>{col?.name || '-'}</TableCell>
-                <TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                <TableCell><DropdownMenu onOpenChange={(open) => { if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); } }}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
               </TableRow>);
             })}</TableBody></Table>
