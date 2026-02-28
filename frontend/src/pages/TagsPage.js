@@ -11,9 +11,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '../components/ui/select';
+import { MultiSelect } from '../components/MultiSelect';} from '../components/ui/select';
 import {
   Hash, ArrowLeft, Package, Heart, BookOpen, FolderKanban,
   CheckSquare, TrendingUp, Loader2
