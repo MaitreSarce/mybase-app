@@ -337,14 +337,16 @@ const CollectionsPage = () => {
           {collections.map(collection => (
             <Card key={collection.id}
               className="bg-card border-border card-hover group cursor-pointer"
-              onClick={() => handleSelectCollection(collection)}
+              onClick={() => { if (!dropdownActionRef.current) handleSelectCollection(collection); }}
               data-testid={`collection-card-${collection.id}`}>
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${getColorClass(collection.color)}`} />
                   <CardTitle className="text-lg">{collection.name}</CardTitle>
                 </div>
-                <DropdownMenu>
+                <DropdownMenu onOpenChange={(open) => {
+                  if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+                }}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon"
                       className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
