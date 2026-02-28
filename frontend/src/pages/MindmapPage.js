@@ -78,6 +78,22 @@ const MindmapPage = () => {
     return map;
   }, [rawData.nodes]);
 
+  const fetchData = useCallback(async (persp) => {
+    try {
+      const [mapRes, tagsRes] = await Promise.all([
+        mindmapApi.getData(persp || undefined),
+        tagsApi.getAll(),
+      ]);
+      setRawData(mapRes.data);
+      setAllTags(tagsRes.data);
+    } catch {
+      toast.error('Erreur lors du chargement de la carte');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
   const handleConnect = useCallback(async (connection) => {
     const sourceType = nodeTypeMap[connection.source];
     const targetType = nodeTypeMap[connection.target];
@@ -109,22 +125,6 @@ const MindmapPage = () => {
     }
     fetchData(perspective);
   }, [nodeTypeMap, fetchData, perspective]);
-
-  const fetchData = useCallback(async (persp) => {
-    try {
-      const [mapRes, tagsRes] = await Promise.all([
-        mindmapApi.getData(persp || undefined),
-        tagsApi.getAll(),
-      ]);
-      setRawData(mapRes.data);
-      setAllTags(tagsRes.data);
-    } catch {
-      toast.error('Erreur lors du chargement de la carte');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
 
   useEffect(() => { fetchData(perspective); }, [fetchData, perspective]);
 
