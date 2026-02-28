@@ -193,7 +193,7 @@ const ContentPage = () => {
               <div className="space-y-2"><Label>Titre *</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required data-testid="content-title-input" /></div>
               <div className="space-y-2">
                 <Label>Type</Label>
-                <Select value={formData.content_type} onValueChange={v => setFormData({...formData, content_type: v})}>
+                <Select key={formData.content_type} value={formData.content_type} onValueChange={v => setFormData({...formData, content_type: v})}>
                   <SelectTrigger data-testid="content-type-select"><SelectValue /></SelectTrigger>
                   <SelectContent>{allContentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
