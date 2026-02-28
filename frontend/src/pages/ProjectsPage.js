@@ -185,8 +185,11 @@ const ProjectsPage = () => {
   const filteredTasks = tasks.filter(task => {
     if (!showCompleted && task.completed) return false;
     if (selectedProject !== 'all' && task.project_id !== selectedProject) return false;
+    if (filterTag !== 'all' && !task.tags?.includes(filterTag)) return false;
     return true;
   });
+
+  const tagNames = allTags.map(t => t.name);
 
   const ProjectCard = ({ project, depth = 0 }) => {
     const children = getChildren(project.id);
