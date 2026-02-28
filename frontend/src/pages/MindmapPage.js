@@ -177,7 +177,7 @@ const MindmapPage = () => {
                 <SelectItem disabled className="font-semibold text-xs text-muted-foreground">-- Par tag --</SelectItem>
               )}
               {allTags.map(tag => (
-                <SelectItem key={tag} value={`tag:${tag}`}>{tag}</SelectItem>
+                <SelectItem key={tag.name} value={`tag:${tag.name}`}>{tag.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
