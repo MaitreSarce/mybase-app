@@ -290,18 +290,14 @@ const ProjectsPage = () => {
         </div>
       </div>
 
-      {/* Tag filter */}
-      {tagNames.length > 0 && (
-        <Select value={filterTag} onValueChange={setFilterTag}>
-          <SelectTrigger className="w-[160px]" data-testid="projects-filter-tag">
-            <SelectValue placeholder="Tag" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les tags</SelectItem>
-            {tagNames.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      )}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input type="search" placeholder="Rechercher..." value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
+        </div>
+        {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="projects-filter-tags" />}
+      </div>
 
       <Tabs defaultValue="projects" className="space-y-4">
         <TabsList>
