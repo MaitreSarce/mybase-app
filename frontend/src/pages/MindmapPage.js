@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { mindmapApi, tagsApi } from '../services/api';
+import { mindmapApi, tagsApi, linksApi } from '../services/api';
 import { toast } from 'sonner';
 import {
   ReactFlow,
