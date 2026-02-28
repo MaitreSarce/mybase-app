@@ -176,7 +176,7 @@ const InventoryPage = () => {
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                     <DropdownMenuItem onSelect={() => handleOpenDialog(item)}>
                       <Pencil className="h-4 w-4 mr-2" />Modifier
                     </DropdownMenuItem>
@@ -222,7 +222,7 @@ const InventoryPage = () => {
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                         <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive">
                           <Trash2 className="h-4 w-4 mr-2" />Supprimer
                         </DropdownMenuItem>

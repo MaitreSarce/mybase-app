@@ -162,7 +162,7 @@ const WishlistPage = () => {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
                     </DropdownMenuContent>
@@ -190,7 +190,7 @@ const WishlistPage = () => {
                 <TableCell><div className="flex items-center gap-1"><div className={`w-2 h-2 rounded-full ${pi.color}`} />{pi.label}</div></TableCell>
                 <TableCell>{col?.name || '-'}</TableCell>
                 <TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
               </TableRow>);
             })}</TableBody></Table>
         </div>

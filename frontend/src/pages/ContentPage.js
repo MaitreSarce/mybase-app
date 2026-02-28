@@ -155,7 +155,7 @@ const ContentPage = () => {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
                       <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
                     </DropdownMenuContent>
@@ -178,7 +178,7 @@ const ContentPage = () => {
                 <TableCell className="font-medium">{item.title}</TableCell><TableCell><Badge variant="outline" className="text-xs">{ti.label}</Badge></TableCell>
                 <TableCell>{item.category || '-'}</TableCell><TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
                 <TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
               </TableRow>);
             })}</TableBody></Table>
         </div>
