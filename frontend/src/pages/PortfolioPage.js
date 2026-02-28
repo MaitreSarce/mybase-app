@@ -344,7 +344,8 @@ const PortfolioPage = () => {
                 const gain = current - invested;
                 const gainPct = invested > 0 ? ((gain / invested) * 100).toFixed(2) : 0;
                 return (
-                  <Card key={asset.id} className="bg-card border-border card-hover group" data-testid={`asset-card-${asset.id}`}>
+                  <Card key={asset.id} className="bg-card border-border card-hover group cursor-pointer"
+                    onClick={() => handleOpenDialog(asset)} data-testid={`asset-card-${asset.id}`}>
                     <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className={`p-2 rounded-md ${typeInfo.bgColor}/20`}>
