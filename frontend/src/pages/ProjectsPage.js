@@ -196,7 +196,9 @@ const ProjectsPage = () => {
     const progress = project.task_count > 0 ? (project.completed_tasks / project.task_count) * 100 : 0;
     return (
       <div className={depth > 0 ? 'ml-6' : ''}>
-        <Card className="bg-card border-border card-hover group" data-testid={`project-card-${project.id}`}>
+        <Card className="bg-card border-border card-hover group cursor-pointer"
+          onClick={() => handleOpenProjectDialog(project)}
+          data-testid={`project-card-${project.id}`}>
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="flex items-center gap-3">
               {depth > 0 && <CornerDownRight className="h-4 w-4 text-muted-foreground" />}
