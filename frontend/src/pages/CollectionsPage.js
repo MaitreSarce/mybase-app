@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { collectionsApi, collectionItemsApi, tagsApi } from '../services/api';
+import { collectionsApi, collectionItemsApi, tagsApi, inventoryApi, wishlistApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -22,6 +21,7 @@ import {
   Plus, MoreVertical, Pencil, Trash2, Layers, Loader2,
   Package, Heart, ArrowLeft, X
 } from 'lucide-react';
+import ItemLinksManager from '../components/ItemLinksManager';
 
 const COLORS = [
   { value: 'blue', label: 'Bleu', class: 'bg-blue-500' },
