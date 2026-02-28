@@ -182,7 +182,8 @@ const CollectionsPage = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {wishItems.map(item => (
-                <Card key={item.id} className="bg-card border-border">
+                <Card key={item.id} className="bg-card border-border card-hover cursor-pointer"
+                  onClick={() => navigate('/wishlist')}>
                   <CardContent className="py-3">
                     <p className="font-medium">{item.name}</p>
                     {item.description && <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{item.description}</p>}
