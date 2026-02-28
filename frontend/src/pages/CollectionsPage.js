@@ -95,7 +95,6 @@ const CollectionsPage = () => {
   };
 
   const handleDelete = async (collection) => {
-    if (!window.confirm(`Supprimer la collection "${collection.name}" ?`)) return;
     try {
       await collectionsApi.delete(collection.id);
       toast.success('Collection supprimée');
