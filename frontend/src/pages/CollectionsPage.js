@@ -319,7 +319,7 @@ const CollectionsPage = () => {
         {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="collections-filter-tags" />}
       </div>
 
-      {collections.length === 0 ? (
+      {filteredCollections.length === 0 ? (
         <Card className="bg-card border-border border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Layers className="h-12 w-12 text-muted-foreground mb-4" />
@@ -332,7 +332,7 @@ const CollectionsPage = () => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {collections.map(collection => (
+          {filteredCollections.map(collection => (
             <Card key={collection.id}
               className="bg-card border-border card-hover group"
               data-testid={`collection-card-${collection.id}`}>
