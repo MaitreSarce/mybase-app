@@ -320,6 +320,7 @@ const CollectionsPage = () => {
 
       <div className="flex flex-wrap gap-3 items-center">
         {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="collections-filter-tags" />}
+        <ViewToggle view={view} onChange={setView} />
       </div>
 
       {filteredCollections.length === 0 ? (
