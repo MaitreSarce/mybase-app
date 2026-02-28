@@ -34,7 +34,6 @@ const COLORS = [
 ];
 
 const CollectionsPage = () => {
-  const navigate = useNavigate();
   const [collections, setCollections] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +43,11 @@ const CollectionsPage = () => {
   const [filterTag, setFilterTag] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [collectionItems, setCollectionItems] = useState(null);
+  const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [editingDetailItem, setEditingDetailItem] = useState(null);
+  const [editingDetailType, setEditingDetailType] = useState(null);
+  const [itemSaving, setItemSaving] = useState(false);
+  const [itemFormData, setItemFormData] = useState({});
   const [formData, setFormData] = useState({
     name: '', description: '', category: '', color: 'blue', metadata_schema: []
   });
