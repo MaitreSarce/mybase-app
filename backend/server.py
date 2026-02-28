@@ -894,6 +894,7 @@ async def create_content(data: ContentCreate, user: dict = Depends(get_current_u
         "content_type": data.content_type,
         "description": data.description,
         "body": data.body,
+        "url": data.url,
         "tags": data.tags,
         "metadata": [m.model_dump() for m in data.metadata],
         "links": [l.model_dump() for l in data.links],
