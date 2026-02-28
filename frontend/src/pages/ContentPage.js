@@ -177,10 +177,10 @@ const ContentPage = () => {
           <Table><TableHeader><TableRow><TableHead>Titre</TableHead><TableHead>Type</TableHead><TableHead>Catégorie</TableHead><TableHead>Tags</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
             <TableBody>{filteredItems.map(item => {
               const ti = getTypeInfo(item.content_type);
-              return (<TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => handleOpenDialog(item)}>
+              return (<TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
                 <TableCell className="font-medium">{item.title}</TableCell><TableCell><Badge variant="outline" className="text-xs">{ti.label}</Badge></TableCell>
                 <TableCell>{item.category || '-'}</TableCell><TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
-                <TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                <TableCell><DropdownMenu onOpenChange={(open) => { if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); } }}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
               </TableRow>);
             })}</TableBody></Table>
