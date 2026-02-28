@@ -2152,6 +2152,44 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
 
 # ==================== STORAGE USAGE ====================
 
+@api_router.get("/tags/all")
+async def get_all_tags(user: dict = Depends(get_current_user)):
+    """Auto-discover all tags from all items"""
+    user_id = user["id"]
+    all_tags = {}
+    source_map = {
+        "inventory": db.inventory,
+        "wishlist": db.wishlist,
+        "content": db.content,
+        "portfolio": db.portfolio,
+        "projects": db.projects,
+        "tasks": db.tasks,
+    }
+    for source_name, col in source_map.items():
+        items = await col.find({"user_id": user_id, "tags": {"$exists": True, "$ne": []}}, {"_id": 0, "tags": 1}).to_list(10000)
+        for item in items:
+            for tag in item.get("tags", []):
+                if tag not in all_tags:
+                    all_tags[tag] = {"name": tag, "count": 0, "sources": set()}
+                all_tags[tag]["count"] += 1
+                all_tags[tag]["sources"].add(source_name)
+    result = []
+    for tag_name, info in sorted(all_tags.items()):
+        result.append({"name": info["name"], "count": info["count"], "sources": list(info["sources"])})
+    return result
+
+@api_router.get("/collections/{collection_id}/items")
+async def get_collection_items(collection_id: str, user: dict = Depends(get_current_user)):
+    """Get all inventory + wishlist items belonging to a collection"""
+    user_id = user["id"]
+    inventory = await db.inventory.find({"user_id": user_id, "collection_id": collection_id}, {"_id": 0}).to_list(1000)
+    wishlist = await db.wishlist.find({"user_id": user_id, "collection_id": collection_id}, {"_id": 0}).to_list(1000)
+    for item in inventory:
+        item["_item_type"] = "inventory"
+    for item in wishlist:
+        item["_item_type"] = "wishlist"
+    return {"inventory": inventory, "wishlist": wishlist}
+
 @api_router.get("/storage/usage")
 async def get_storage_usage(user: dict = Depends(get_current_user)):
     total_size = 0
