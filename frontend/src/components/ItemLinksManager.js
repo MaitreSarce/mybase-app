@@ -97,7 +97,7 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
         <Label className="text-sm font-medium flex items-center gap-2">
           <Link2 className="h-4 w-4" /> Liens ({links.length})
         </Label>
-        <Button variant="outline" size="sm" onClick={() => setShowSearch(!showSearch)} data-testid="add-link-btn">
+        <Button variant="outline" size="sm" onClick={() => setShowSearch(!showSearch)} data-testid="add-link-btn" type="button">
           {showSearch ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
           {showSearch ? 'Fermer' : 'Lier'}
         </Button>
@@ -117,7 +117,7 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
                   <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
                 </div>
                 <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                  onClick={() => handleUnlink(link)}>
+                  onClick={() => handleUnlink(link)} type="button">
                   <X className="h-3 w-3" />
                 </Button>
               </div>
@@ -134,7 +134,7 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSearch())}
               data-testid="link-search-input" className="flex-1" />
-            <Button onClick={handleSearch} disabled={searching} size="icon">
+            <Button onClick={handleSearch} disabled={searching} size="icon" type="button">
               {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
@@ -151,7 +151,8 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
                     {results.map(item => (
                       <button key={item.id} disabled={linking || item.id === itemId}
                         className="w-full flex items-center justify-between p-1.5 rounded hover:bg-secondary/50 text-left text-sm disabled:opacity-30"
-                        onClick={() => handleLink(type.value, item.id, item.name || item.title)}>
+                        onClick={() => handleLink(type.value, item.id, item.name || item.title)}
+                        type="button">
                         <span className="truncate">{item.name || item.title}</span>
                         <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       </button>
