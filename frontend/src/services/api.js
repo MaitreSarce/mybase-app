@@ -188,3 +188,8 @@ export const snapshotsApi = {
   getAll: (months) => api.get('/portfolio/snapshots', { params: { months } }),
   create: () => api.post('/portfolio/snapshots'),
 };
+
+// Calendar API
+export const calendarApi = {
+  getEvents: () => api.get('/calendar/events'),
+};
