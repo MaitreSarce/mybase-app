@@ -1,0 +1,114 @@
+{
+  "summary": "Iteration 10 - All 8 new features VERIFIED WORKING. Calendar page with widget/events/filters/time range, MindMap improvements (node click focus mode + split MultiSelect filters), Collections table view toggle, Custom content type fix (key prop re-render). All previous features still work (delete via three dots, links dialog stays open).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "CALENDAR PAGE - Navigate to /calendar loads correctly with calendar widget, events list, Sections MultiSelect filter, Tags MultiSelect filter, time range selector",
+    "CALENDAR EVENTS - 4 events displayed (2 Inventaire, 1 Souhaits, 1 Contenu) all dated 2026-02-28",
+    "CALENDAR SECTIONS FILTER - MultiSelect with checkboxes for Inventaire, Souhaits, Contenu, Projets, Taches. Selecting Inventaire filters correctly",
+    "CALENDAR TIME RANGE - Select dropdown with Semaine/Mois/Annee options, changes work correctly",
+    "MINDMAP PAGE - 6 nodes displayed with split MultiSelect filters: Sections and Tags",
+    "MINDMAP NODE CLICK FOCUS - Clicking Collection A shows 'Focus: Collection A' badge, dims 4 unconnected nodes (opacity 0.25), keeps 2 normal (Collection A + B connected)",
+    "MINDMAP FOCUS TOGGLE - Second click on same node removes focus mode",
+    "COLLECTIONS VIEWTOGGLE - Card/table view toggle buttons present and functional",
+    "COLLECTIONS TABLE VIEW - Table shows columns: Nom, Items, Catégorie with 2 rows",
+    "COLLECTIONS TABLE THREE DOTS - Menu shows Modifier/Supprimer options",
+    "CUSTOM CONTENT TYPE FIX - Adding custom type 'newstype123' immediately shows in Select dropdown (key prop fix working)",
+    "DELETE STILL WORKS - Created TEST_DeleteMe999, deleted via three dots, toast confirms, stayed on /content page",
+    "LINKS STILL WORK - Dialog stays open during link operations"
+  ],
+  "test_report_links": [
+    "/app/test_reports/iteration_10.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% - Calendar events API returns correct data",
+    "frontend": "100% - All 8 features verified working"
+  },
+  "test_credentials": {
+    "email": "test_debug@test.com",
+    "password": "test123"
+  },
+  "seed_data_creation": "Created and deleted TEST_DeleteMe999 content for delete testing. Created custom type 'newstype123' in content dialog.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iteration 10 features verified working. Key implementations: 1) CalendarPage.js - new page with rdp calendar widget, calendarApi.getEvents(), MultiSelect filters for Sections/Tags, Select for time range (Semaine/Mois/Annee). 2) MindmapPage.js - onNodeClick sets focusedNodeId state, connectedNodeIds computed from edges, dimmed nodes have opacity 0.25 via data.dimmed prop, split MultiSelect filters. 3) CollectionsPage.js - ViewToggle component (view-card-btn/view-table-btn), table view with Nom/Items/Catégorie columns, three dots in each row. 4) ContentPage.js - key={formData.content_type} on Select forces re-render when custom type added.",
+  "features_verified": {
+    "calendar_page": {
+      "route": "/calendar",
+      "calendar_widget": "rdp calendar showing February 2026",
+      "events_list": "4 events displayed with type icons and badges",
+      "sections_filter": "MultiSelect with 5 checkboxes (Inventaire, Souhaits, Contenu, Projets, Taches)",
+      "tags_filter": "MultiSelect with tag checkboxes",
+      "time_range": "Select with Semaine/Mois/Annee options",
+      "event_types": "Inventaire (violet), Souhaits (pink), Contenu (cyan)",
+      "date_28_highlighted": "Bold/underlined for dates with events"
+    },
+    "calendar_filters": {
+      "sections_filter": "Filtering by Inventaire works correctly",
+      "time_range_semaine": "Changes to Semaine view",
+      "time_range_annee": "Changes to Annee view"
+    },
+    "mindmap_improvements": {
+      "nodes": "6 nodes displayed",
+      "split_filters": "Sections MultiSelect + Tags MultiSelect (two separate filters)",
+      "node_click_focus": "Clicking node shows Focus badge, dims unconnected nodes",
+      "focus_dimming": "4 dimmed nodes, 2 normal nodes when Collection A focused",
+      "focus_toggle": "Second click removes focus mode"
+    },
+    "collections_table_view": {
+      "view_toggle": "Card/table toggle buttons present",
+      "table_headers": ["Nom", "Items", "Catégorie"],
+      "table_rows": "2 collections shown",
+      "three_dots_menu": "Shows Modifier and Supprimer options"
+    },
+    "custom_content_type_fix": {
+      "initial_value": "Recette",
+      "custom_type_input": "Working - accepts custom type name",
+      "add_button": "Working - triggers type addition",
+      "select_updates": "FIXED - Select immediately shows new type 'newstype123'",
+      "key_prop": "key={formData.content_type} forces re-render"
+    },
+    "delete_still_works": {
+      "method": "Three dots menu -> Supprimer",
+      "toast": "TEST_DeleteMe999 supprimé",
+      "no_navigation": "Stayed on /content page"
+    },
+    "links_still_work": {
+      "dialog_stays_open": "Yes - dialog remains open during link operations",
+      "search_works": "Can search for items to link"
+    }
+  },
+  "api_verification": {
+    "GET /api/calendar/events": {
+      "status": 200,
+      "events_returned": 4,
+      "event_types": ["inventory", "wishlist", "content"],
+      "date_format": "YYYY-MM-DD"
+    },
+    "GET /api/mindmap": {
+      "status": 200,
+      "nodes": 6,
+      "edges": 1
+    }
+  },
+  "screenshots_taken": [
+    "calendar_page.png - Calendar with February 2026, 4 events, filters",
+    "calendar_sections_filter.png - Sections filter open with checkboxes",
+    "mindmap_page.png - 6 nodes, Sections and Tags filters",
+    "mindmap_focus_mode.png - Focus: Collection A badge, dimmed nodes",
+    "collections_card.png - Card view with ViewToggle",
+    "collections_table.png - Table view with three dots dropdown open",
+    "custom_content_type.png - Select showing 'newstype123'",
+    "link_dialog.png - Link search dialog open"
+  ]
+}
