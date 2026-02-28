@@ -22,9 +22,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Plus, MoreVertical, Pencil, Trash2, FolderKanban, Loader2,
-  CheckCircle2, Circle, Calendar, CornerDownRight,
+  CheckCircle2, Circle, Calendar, CornerDownRight, Search,
 } from 'lucide-react';
 import ItemLinksManager from '../components/ItemLinksManager';
+import { MultiSelect } from '../components/MultiSelect';
 
 const COLORS = [
   { value: 'blue', label: 'Bleu', class: 'bg-blue-500' },
@@ -55,7 +56,8 @@ const ProjectsPage = () => {
   const [selectedProject, setSelectedProject] = useState('all');
   const [showCompleted, setShowCompleted] = useState(false);
   const [allTags, setAllTags] = useState([]);
-  const [filterTag, setFilterTag] = useState('all');
+  const [filterTags, setFilterTags] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [projectForm, setProjectForm] = useState({
     name: '', description: '', color: 'blue', parent_id: '', tags: []
