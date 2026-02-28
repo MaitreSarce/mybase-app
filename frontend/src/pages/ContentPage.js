@@ -75,10 +75,10 @@ const ContentPage = () => {
   const handleOpenDialog = (item = null) => {
     if (item) {
       setEditingItem(item);
-      setFormData({ title: item.title, content_type: item.content_type, description: item.description || '', body: item.body || '', tags: item.tags || [], category: item.category || '' });
+      setFormData({ title: item.title, content_type: item.content_type, description: item.description || '', body: item.body || '', url: item.url || '', tags: item.tags || [], category: item.category || '' });
     } else {
       setEditingItem(null);
-      setFormData({ title: '', content_type: 'recipe', description: '', body: '', tags: [], category: '' });
+      setFormData({ title: '', content_type: 'recipe', description: '', body: '', url: '', tags: [], category: '' });
     }
     setDialogOpen(true);
   };
