@@ -186,11 +186,13 @@ const ProjectsPage = () => {
   const filteredTasks = tasks.filter(task => {
     if (!showCompleted && task.completed) return false;
     if (selectedProject !== 'all' && task.project_id !== selectedProject) return false;
-    if (filterTag !== 'all' && !task.tags?.includes(filterTag)) return false;
+    if (filterTags.length && !filterTags.some(t => task.tags?.includes(t))) return false;
+    if (searchQuery && !task.title?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
   const tagNames = allTags.map(t => t.name);
+  const tagOpts = tagNames.map(t => ({ value: t, label: t }));
 
   const ProjectCard = ({ project, depth = 0 }) => {
     const children = getChildren(project.id);
