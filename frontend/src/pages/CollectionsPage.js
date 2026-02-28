@@ -41,7 +41,7 @@ const CollectionsPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCollection, setEditingCollection] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [filterTag, setFilterTag] = useState('all');
+  const [filterTags, setFilterTags] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [collectionItems, setCollectionItems] = useState(null);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
