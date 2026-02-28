@@ -52,6 +52,7 @@ const WishlistPage = () => {
     name: '', description: '', url: '', price: '', currency: 'EUR',
     priority: 3, tags: [], target_date: '', collection_id: ''
   });
+  const dropdownActionRef = useRef(false);
 
   useEffect(() => { fetchData(); }, [showPurchased]);
 
