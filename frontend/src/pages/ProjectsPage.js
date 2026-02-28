@@ -205,7 +205,9 @@ const ProjectsPage = () => {
               <CardTitle className="text-lg">{project.name}</CardTitle>
               {project.status !== 'active' && <Badge variant="outline" className="text-xs">{project.status}</Badge>}
             </div>
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => {
+              if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); }
+            }}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={e => e.stopPropagation()}>
