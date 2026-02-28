@@ -22,7 +22,7 @@ import {
 } from '../components/ui/table';
 import {
   Plus, MoreVertical, Pencil, Trash2, BookOpen, Loader2,
-  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText
+  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink
 } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
