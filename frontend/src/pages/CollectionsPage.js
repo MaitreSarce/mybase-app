@@ -315,18 +315,9 @@ const CollectionsPage = () => {
         </Button>
       </div>
 
-      {/* Tag filter */}
-      {tagNames.length > 0 && (
-        <Select value={filterTag} onValueChange={setFilterTag}>
-          <SelectTrigger className="w-[200px]" data-testid="collections-filter-tag">
-            <SelectValue placeholder="Filtrer par tag" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les tags</SelectItem>
-            {tagNames.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      )}
+      <div className="flex flex-wrap gap-3 items-center">
+        {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="collections-filter-tags" />}
+      </div>
 
       {collections.length === 0 ? (
         <Card className="bg-card border-border border-dashed">
