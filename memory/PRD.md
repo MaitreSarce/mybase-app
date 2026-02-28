@@ -11,40 +11,28 @@ Application "super app" personnelle combinant ERP, base de données, suivi finan
 - [x] CoinGecko crypto, Alertes, Liens bidirectionnels, Upload fichiers
 - [x] Sous-projets, Types custom contenu, Carte Mentale, Portfolio snapshots/transactions
 
-### Phase 4-5 - Corrections UI (28 Fév 2026)
-- [x] Fix suppression (onSelect, no window.confirm, onClick sur contenu pas Card)
-- [x] onCloseAutoFocus sur tous DropdownMenuContent
-- [x] Tags auto-découverts + vue détail, API /api/tags/{tag_name}/items
+### Phase 4-6 - Corrections UI + Priorités (28 Fév 2026)
+- [x] Fix suppression (onSelect, onClick sur contenu pas Card, onCloseAutoFocus)
+- [x] Tags auto-découverts + vue détail
+- [x] Liens via dialogue (type="button"), 3 petits points toujours visibles
+- [x] Multi-sélection sur TOUS les filtres, Types de contenu personnalisés (key fix)
 
-### Phase 6 - Priorités utilisateur (28 Fév 2026)
-- [x] Liens via dialogue : type="button" sur tous les boutons ItemLinksManager
-- [x] 3 petits points toujours visibles (opacity-0 retiré)
-- [x] Multi-sélection sur TOUS les filtres (MultiSelect Popover+Checkboxes)
-- [x] Types de contenu personnalisés (key prop fix)
-
-### Phase 7 - Nouvelles fonctionnalités (28 Fév 2026)
-- [x] **Carte Mentale améliorée** : Clic sur noeud filtre connexions (dimmed), 2 MultiSelect séparés (Sections + Tags), drag pour créer liens
-- [x] **Vue Carte/Tableau** sur Collections (ViewToggle + Table view)
-- [x] **Page Calendrier** : Widget calendrier, liste événements, filtres MultiSelect (Sections, Tags), sélecteur plage temps (Semaine/Mois/Année)
-- [x] **API /api/calendar/events** : Agrège dates de toutes les sections
-- [x] Fix type de contenu personnalisé (Select key prop forçant re-render)
-- [x] Liens depuis Contenu (ItemLinksManager déjà intégré)
+### Phase 7 - Fonctionnalités majeures (28 Fév 2026)
+- [x] Carte Mentale améliorée : Focus connexions, 2 MultiSelect (Sections + Tags), drag links
+- [x] Vue Carte/Tableau sur Collections (ViewToggle + Table)
+- [x] Page Calendrier : Widget, événements, MultiSelect (Sections, Tags), plage temps
+- [x] **Champ URL/Lien sur Contenu** : Backend (ContentCreate/Update/Response), frontend (input + affichage carte avec icône lien externe)
+- [x] **Liens croisés Contenu** : ItemLinksManager intégré dans le dialogue d'édition contenu
 
 ## Architecture
 - **Backend**: FastAPI, MongoDB (FerretDB+PostgreSQL), JWT
 - **Frontend**: React, Shadcn/UI, TailwindCSS, Recharts, @xyflow/react
-- **Pattern Card/Dropdown**: onClick sur zones contenu internes seulement
+- **DB Collections**: users, collections, inventory, wishlist, projects, tasks, content, portfolio, alerts, managed_tags, custom_types, portfolio_transactions, portfolio_snapshots
 
 ## Backlog
-
 ### P0
 - [ ] Alertes améliorées / Comparateur de prix
-
 ### P1
-- [ ] Intégration Alpha Vantage (actions) - clé API requise
-- [ ] Import/Export de données
-- [ ] Refactoring backend (server.py → modules)
-
+- [ ] Intégration Alpha Vantage (actions), Import/Export données, Refactoring backend
 ### P2
-- [ ] Notifications email, Mode hors ligne, Thèmes personnalisables
-- [ ] Recherche globale Ctrl+K
+- [ ] Notifications email, Mode hors ligne, Thèmes, Recherche Ctrl+K
