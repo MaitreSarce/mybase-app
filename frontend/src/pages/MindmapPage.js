@@ -254,11 +254,14 @@ const MindmapPage = () => {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onConnect={handleConnect}
+            onEdgesDelete={handleEdgesDelete}
             nodeTypes={nodeTypes}
             fitView
             minZoom={0.1}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}
+            connectionLineStyle={{ stroke: '#888', strokeWidth: 2 }}
           >
             <Background color="#333" gap={20} />
             <Controls />
