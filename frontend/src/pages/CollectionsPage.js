@@ -34,6 +34,7 @@ const COLORS = [
 ];
 
 const CollectionsPage = () => {
+  const navigate = useNavigate();
   const [collections, setCollections] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [loading, setLoading] = useState(true);
