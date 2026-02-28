@@ -2,52 +2,36 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { mindmapApi, tagsApi, linksApi } from '../services/api';
 import { toast } from 'sonner';
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  Handle,
-  Position,
+  ReactFlow, Background, Controls, MiniMap,
+  useNodesState, useEdgesState, Handle, Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '../components/ui/select';
-import { RefreshCw, Loader2, Network } from 'lucide-react';
+import { RefreshCw, Loader2, Network, X } from 'lucide-react';
+import { MultiSelect } from '../components/MultiSelect';
 
 const TYPE_LABELS = {
-  collection: 'Collection',
-  inventory: 'Inventaire',
-  wishlist: 'Souhait',
-  project: 'Projet',
-  task: 'Tâche',
-  content: 'Contenu',
-  portfolio: 'Actif',
+  collection: 'Collection', inventory: 'Inventaire', wishlist: 'Souhait',
+  project: 'Projet', task: 'Tache', content: 'Contenu', portfolio: 'Actif',
 };
 
 const TYPE_COLORS = {
-  collection: '#3b82f6',
-  inventory: '#8b5cf6',
-  wishlist: '#ec4899',
-  project: '#f59e0b',
-  task: '#10b981',
-  content: '#06b6d4',
-  portfolio: '#f97316',
+  collection: '#3b82f6', inventory: '#8b5cf6', wishlist: '#ec4899',
+  project: '#f59e0b', task: '#10b981', content: '#06b6d4', portfolio: '#f97316',
 };
 
 const CustomNode = ({ data }) => (
   <div
     className="px-4 py-2 rounded-lg border-2 shadow-lg min-w-[120px] max-w-[200px] text-center relative"
     style={{
-      backgroundColor: 'hsl(240 6% 10%)',
+      backgroundColor: data.dimmed ? 'hsl(240 6% 7%)' : 'hsl(240 6% 10%)',
       borderColor: data.color,
       color: '#fafafa',
+      opacity: data.dimmed ? 0.25 : 1,
+      transition: 'opacity 0.3s',
     }}
   >
     <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
@@ -64,54 +48,42 @@ const nodeTypes = { custom: CustomNode };
 const MindmapPage = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [perspective, setPerspective] = useState('');
   const [allTags, setAllTags] = useState([]);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rawData, setRawData] = useState({ nodes: [], edges: [] });
-  const [connecting, setConnecting] = useState(false);
+  const [filterTypes, setFilterTypes] = useState([]);
+  const [filterTags, setFilterTags] = useState([]);
+  const [focusedNodeId, setFocusedNodeId] = useState(null);
 
-  // Map node id -> type for link creation
   const nodeTypeMap = useMemo(() => {
     const map = {};
     rawData.nodes.forEach(n => { map[n.id] = n.type; });
     return map;
   }, [rawData.nodes]);
 
-  const fetchData = useCallback(async (persp) => {
+  const fetchData = useCallback(async () => {
     try {
-      const [mapRes, tagsRes] = await Promise.all([
-        mindmapApi.getData(persp || undefined),
-        tagsApi.getAll(),
-      ]);
+      const [mapRes, tagsRes] = await Promise.all([mindmapApi.getData(), tagsApi.getAll()]);
       setRawData(mapRes.data);
       setAllTags(tagsRes.data);
-    } catch {
-      toast.error('Erreur lors du chargement de la carte');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch { toast.error('Erreur lors du chargement de la carte'); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   const handleConnect = useCallback(async (connection) => {
     const sourceType = nodeTypeMap[connection.source];
     const targetType = nodeTypeMap[connection.target];
     if (!sourceType || !targetType) return;
-    setConnecting(true);
     try {
       await linksApi.create({
-        source_type: sourceType,
-        source_id: connection.source,
-        target_type: targetType,
-        target_id: connection.target,
+        source_type: sourceType, source_id: connection.source,
+        target_type: targetType, target_id: connection.target,
       });
-      toast.success('Lien créé');
-      fetchData(perspective);
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la création du lien');
-    } finally { setConnecting(false); }
-  }, [nodeTypeMap, fetchData, perspective]);
+      toast.success('Lien cree');
+      fetchData();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
+  }, [nodeTypeMap, fetchData]);
 
   const handleEdgesDelete = useCallback(async (deletedEdges) => {
     for (const edge of deletedEdges) {
@@ -120,41 +92,49 @@ const MindmapPage = () => {
       if (!sourceType || !targetType) continue;
       try {
         await linksApi.delete(sourceType, edge.source, targetType, edge.target);
-        toast.success('Lien supprimé');
-      } catch { toast.error('Erreur lors de la suppression du lien'); }
+        toast.success('Lien supprime');
+      } catch { toast.error('Erreur'); }
     }
-    fetchData(perspective);
-  }, [nodeTypeMap, fetchData, perspective]);
+    fetchData();
+  }, [nodeTypeMap, fetchData]);
 
-  useEffect(() => { fetchData(perspective); }, [fetchData, perspective]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Compute connected node IDs for focus mode
+  const connectedNodeIds = useMemo(() => {
+    if (!focusedNodeId) return null;
+    const ids = new Set([focusedNodeId]);
+    rawData.edges.forEach(e => {
+      if (e.source === focusedNodeId) ids.add(e.target);
+      if (e.target === focusedNodeId) ids.add(e.source);
+    });
+    return ids;
+  }, [focusedNodeId, rawData.edges]);
 
   useEffect(() => {
-    if (!rawData.nodes.length) {
-      setNodes([]);
-      setEdges([]);
-      return;
+    if (!rawData.nodes.length) { setNodes([]); setEdges([]); return; }
+
+    // Apply filters
+    let filteredNodes = rawData.nodes;
+    if (filterTypes.length > 0) {
+      filteredNodes = filteredNodes.filter(n => filterTypes.includes(n.type));
+    }
+    if (filterTags.length > 0) {
+      filteredNodes = filteredNodes.filter(n => n.tags?.some(t => filterTags.includes(t)));
     }
 
-    // Layout: arrange nodes in a circle/force-like layout
-    const nodeCount = rawData.nodes.length;
+    const nodeCount = filteredNodes.length;
     const radius = Math.max(300, nodeCount * 40);
     const centerX = radius + 100;
     const centerY = radius + 100;
 
-    const flowNodes = rawData.nodes.map((n, i) => {
+    const flowNodes = filteredNodes.map((n, i) => {
       const angle = (2 * Math.PI * i) / nodeCount;
+      const dimmed = connectedNodeIds ? !connectedNodeIds.has(n.id) : false;
       return {
-        id: n.id,
-        type: 'custom',
-        position: {
-          x: centerX + radius * Math.cos(angle),
-          y: centerY + radius * Math.sin(angle),
-        },
-        data: {
-          label: n.name,
-          color: n.color || TYPE_COLORS[n.type] || '#888',
-          itemType: n.type,
-        },
+        id: n.id, type: 'custom',
+        position: { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) },
+        data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
       };
     });
 
@@ -162,35 +142,27 @@ const MindmapPage = () => {
     const flowEdges = rawData.edges
       .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
       .map((e, i) => ({
-        id: `e-${i}`,
-        source: e.source,
-        target: e.target,
-        label: e.label || '',
-        style: { stroke: '#555', strokeWidth: 1.5 },
-        labelStyle: { fill: '#aaa', fontSize: 10 },
-        animated: false,
+        id: `e-${i}`, source: e.source, target: e.target, label: e.label || '',
+        style: { stroke: connectedNodeIds && (!connectedNodeIds.has(e.source) || !connectedNodeIds.has(e.target)) ? '#333' : '#666', strokeWidth: 1.5 },
+        labelStyle: { fill: '#aaa', fontSize: 10 }, animated: false,
       }));
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [rawData, setNodes, setEdges]);
+  }, [rawData, filterTypes, filterTags, connectedNodeIds, setNodes, setEdges]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchData(perspective);
-  };
+  const handleNodeClick = useCallback((_, node) => {
+    setFocusedNodeId(prev => prev === node.id ? null : node.id);
+  }, []);
 
-  const handlePerspectiveChange = (val) => {
-    setPerspective(val === 'all' ? '' : val);
-  };
+  const handleRefresh = () => { setRefreshing(true); fetchData(); };
+
+  const typeOpts = Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v }));
+  const tagOpts = allTags.map(t => ({ value: t.name, label: t.name }));
+  const focusedNodeName = focusedNodeId ? rawData.nodes.find(n => n.id === focusedNodeId)?.name : null;
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-[600px] w-full rounded-lg" />
-      </div>
-    );
+    return (<div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-[600px] w-full rounded-lg" /></div>);
   }
 
   return (
@@ -198,43 +170,29 @@ const MindmapPage = () => {
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Carte Mentale</h1>
-          <p className="text-muted-foreground mt-1">
-            Visualisez les connexions entre tous vos éléments
-          </p>
+          <p className="text-muted-foreground mt-1">Visualisez les connexions entre vos elements</p>
         </div>
-        <div className="flex gap-2 items-start">
-          <Select value={perspective || 'all'} onValueChange={handlePerspectiveChange}>
-            <SelectTrigger className="w-[200px]" data-testid="mindmap-perspective-select">
-              <SelectValue placeholder="Perspective" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tout afficher</SelectItem>
-              <SelectItem disabled className="font-semibold text-xs text-muted-foreground">-- Par type --</SelectItem>
-              {Object.entries(TYPE_LABELS).map(([key, label]) => (
-                <SelectItem key={key} value={`type:${key}`}>{label}</SelectItem>
-              ))}
-              {allTags.length > 0 && (
-                <SelectItem disabled className="font-semibold text-xs text-muted-foreground">-- Par tag --</SelectItem>
-              )}
-              {allTags.map(tag => (
-                <SelectItem key={tag.name} value={`tag:${tag.name}`}>{tag.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap gap-2 items-start">
+          <MultiSelect options={typeOpts} selected={filterTypes} onChange={setFilterTypes} placeholder="Sections" testId="mindmap-filter-types" />
+          {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="mindmap-filter-tags" />}
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="mindmap-refresh-btn">
             {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {Object.entries(TYPE_LABELS).map(([key, label]) => (
           <Badge key={key} variant="outline" className="gap-1.5 text-xs">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[key] }} />
-            {label}
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[key] }} />{label}
           </Badge>
         ))}
+        {focusedNodeName && (
+          <Badge variant="secondary" className="gap-1.5 ml-4">
+            Focus: {focusedNodeName}
+            <X className="h-3 w-3 cursor-pointer" onClick={() => setFocusedNodeId(null)} />
+          </Badge>
+        )}
       </div>
 
       {rawData.nodes.length === 0 ? (
@@ -242,39 +200,29 @@ const MindmapPage = () => {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Network className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">Carte vide</h3>
-            <p className="text-sm text-muted-foreground">
-              Ajoutez des éléments et des liens pour les voir ici
-            </p>
+            <p className="text-sm text-muted-foreground">Ajoutez des elements et des liens pour les voir ici</p>
           </CardContent>
         </Card>
       ) : (
         <div className="h-[600px] rounded-lg border border-border overflow-hidden bg-background" data-testid="mindmap-canvas">
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={handleConnect}
-            onEdgesDelete={handleEdgesDelete}
-            nodeTypes={nodeTypes}
-            fitView
-            minZoom={0.1}
-            maxZoom={2}
+            nodes={nodes} edges={edges}
+            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            onConnect={handleConnect} onEdgesDelete={handleEdgesDelete}
+            onNodeClick={handleNodeClick}
+            nodeTypes={nodeTypes} fitView minZoom={0.1} maxZoom={2}
             proOptions={{ hideAttribution: true }}
             connectionLineStyle={{ stroke: '#888', strokeWidth: 2 }}
           >
             <Background color="#333" gap={20} />
             <Controls />
-            <MiniMap
-              nodeColor={(n) => n.data?.color || '#888'}
-              style={{ backgroundColor: 'hsl(240 6% 7%)' }}
-            />
+            <MiniMap nodeColor={(n) => n.data?.color || '#888'} style={{ backgroundColor: 'hsl(240 6% 7%)' }} />
           </ReactFlow>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground text-center">
-        {rawData.nodes.length} éléments, {rawData.edges.length} connexions — Glissez d'un point à un autre pour créer un lien
+        {rawData.nodes.length} elements, {rawData.edges.length} connexions — Cliquez sur un noeud pour voir ses connexions, glissez d'un point a un autre pour creer un lien
       </p>
     </div>
   );
