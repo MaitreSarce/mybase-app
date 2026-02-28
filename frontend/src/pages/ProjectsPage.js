@@ -214,16 +214,16 @@ const ProjectsPage = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenTaskDialog(null, project.id); }}>
+                <DropdownMenuItem onClick={() => handleOpenTaskDialog(null, project.id)}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenProjectDialog(null, project.id); }}>
+                <DropdownMenuItem onClick={() => handleOpenProjectDialog(null, project.id)}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter un sous-projet
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenProjectDialog(project); }}>
+                <DropdownMenuItem onClick={() => handleOpenProjectDialog(project)}>
                   <Pencil className="h-4 w-4 mr-2" />Modifier
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteProject(project); }} className="text-destructive">
+                <DropdownMenuItem onClick={() => handleDeleteProject(project)} className="text-destructive">
                   <Trash2 className="h-4 w-4 mr-2" />Supprimer
                 </DropdownMenuItem>
               </DropdownMenuContent>
