@@ -1926,12 +1926,20 @@ async def list_media(
     user: dict = Depends(get_current_user)
 ):
     query: Dict[str, Any] = {"user_id": user["id"]}
-    if item_type and item_id:
-        query["linked_items"] = {"$elemMatch": {"item_type": item_type, "item_id": item_id}}
     if floating_only:
         query["is_floating"] = True
 
     rows = await db.media_items.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+    if item_type and item_id:
+        rows = [
+            r for r in rows
+            if any(
+                li.get("item_type") == item_type and li.get("item_id") == item_id
+                for li in (r.get("linked_items") or [])
+            )
+        ]
+
     return [_serialize_media(r) for r in rows]
 
 
