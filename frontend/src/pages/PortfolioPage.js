@@ -1,718 +1,364 @@
-import { useState, useEffect } from 'react';
-import { portfolioApi, cryptoApi, transactionsApi, snapshotsApi } from '../services/api';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { portfolioV2Api } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from '../components/ui/dialog';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Plus, Trash2, Pencil, X } from 'lucide-react';
 import {
-  Plus, MoreVertical, Pencil, Trash2, TrendingUp, Loader2,
-  Bitcoin, Building, LineChart, ArrowUpRight, ArrowDownRight,
-  Wallet, X, RefreshCw, Camera, ArrowRightLeft
-} from 'lucide-react';
-import {
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
-  XAxis, YAxis, Tooltip, Legend, AreaChart, Area
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+  LineChart,
+  Line,
 } from 'recharts';
+import ItemLinksManager from '../components/ItemLinksManager';
+import FileUploader from '../components/FileUploader';
 
-const ASSET_TYPES = [
-  { value: 'crypto', label: 'Crypto', icon: Bitcoin, color: 'text-amber-400', bgColor: 'bg-amber-500' },
-  { value: 'stock', label: 'Actions', icon: LineChart, color: 'text-blue-400', bgColor: 'bg-blue-500' },
-  { value: 'real_estate', label: 'Immobilier', icon: Building, color: 'text-emerald-400', bgColor: 'bg-emerald-500' },
-  { value: 'other', label: 'Autre', icon: Wallet, color: 'text-violet-400', bgColor: 'bg-violet-500' },
+const TYPES = [
+  { value: 'crypto', label: 'Crypto', color: '#22c55e' },
+  { value: 'etf_action', label: 'ETF-Action', color: '#3b82f6' },
+  { value: 'immo', label: 'Immo', color: '#f59e0b' },
+  { value: 'other', label: 'Autres', color: '#a855f7' },
 ];
+const SALE_TYPES = ['Immo', 'Crypto', 'Action', 'Autres'];
+const PIE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#a855f7', '#ef4444'];
 
-const CHART_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
+const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const euro = (v) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n(v));
+const pct = (v) => `${n(v).toFixed(2)}%`;
+
+const statusInitial = { name: '', status: 'active', updated_date: '', account_type: 'crypto', invested: '', sold: '', real: '' };
+const depositInitial = { account_name: '', date: '', invested: '', sold: '', total: '', comment: '' };
+const saleInitial = { date: '', amount: '', source: '', received_on: '', comment: '', sale_type: 'Autres' };
+const physicalInitial = { purchase_date: '', category: '', brand: '', name: '', purchase_shop: '', purchase_price: '', valuation: '', sale_price: '', sale_date: '', sale_shop: '' };
+const snapInitial = { date: '', total_invested: '', total_sold: '', total_real: '', total_gain: '', total_perf_pct: '' };
+
+const emptyTypeInputs = () => TYPES.reduce((acc, t) => ({ ...acc, [t.value]: { invested: '', sold: '', real: '' } }), {});
 
 const PortfolioPage = () => {
-  const [assets, setAssets] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [snapshots, setSnapshots] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [txDialogOpen, setTxDialogOpen] = useState(false);
-  const [editingAsset, setEditingAsset] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [snapshotting, setSnapshotting] = useState(false);
-  const [filterType, setFilterType] = useState('all');
-  const [newTag, setNewTag] = useState('');
-  const [formData, setFormData] = useState({
-    name: '', asset_type: 'crypto', symbol: '', quantity: '',
-    purchase_price: '', purchase_date: '', currency: 'EUR',
-    current_price: '', tags: [], notes: ''
-  });
-  const [txForm, setTxForm] = useState({
-    asset_id: '', transaction_type: 'buy', quantity: '',
-    price_per_unit: '', date: '', fees: '', notes: ''
-  });
+  const [statusRows, setStatusRows] = useState([]);
+  const [deposits, setDeposits] = useState([]);
+  const [sales, setSales] = useState([]);
+  const [physical, setPhysical] = useState([]);
+  const [snaps, setSnaps] = useState([]);
 
-  useEffect(() => { fetchAll(); }, []);
+  const [statusForm, setStatusForm] = useState(statusInitial);
+  const [depositForm, setDepositForm] = useState(depositInitial);
+  const [saleForm, setSaleForm] = useState(saleInitial);
+  const [phyForm, setPhyForm] = useState(physicalInitial);
+  const [snapForm, setSnapForm] = useState(snapInitial);
+  const [snapTypeInputs, setSnapTypeInputs] = useState(emptyTypeInputs());
 
-  const fetchAll = async () => {
+  const [editStatusId, setEditStatusId] = useState(null);
+  const [editDepositId, setEditDepositId] = useState(null);
+  const [editSaleId, setEditSaleId] = useState(null);
+  const [editPhysicalId, setEditPhysicalId] = useState(null);
+  const [editSnapId, setEditSnapId] = useState(null);
+
+  const [statusSearch, setStatusSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [depositAccountFilter, setDepositAccountFilter] = useState('all');
+
+  const load = async () => {
     try {
-      const [assetsRes, txRes, snapRes] = await Promise.all([
-        portfolioApi.getAll(),
-        transactionsApi.getAll(),
-        snapshotsApi.getAll(12)
+      const [s, d, v, p, w] = await Promise.all([
+        portfolioV2Api.getStatus(),
+        portfolioV2Api.getDeposits(),
+        portfolioV2Api.getSales(),
+        portfolioV2Api.getPhysicalAssets(),
+        portfolioV2Api.getSnapshots(),
       ]);
-      setAssets(assetsRes.data);
-      setTransactions(txRes.data);
-      setSnapshots(snapRes.data);
-    } catch { toast.error('Erreur lors du chargement'); }
-    finally { setLoading(false); }
-  };
-
-  const handleRefreshPrices = async () => {
-    setRefreshing(true);
-    try {
-      const response = await cryptoApi.refreshPortfolioPrices();
-      toast.success(response.data.message || 'Prix mis à jour');
-      fetchAll();
-    } catch { toast.error('Erreur lors de la mise à jour des prix'); }
-    finally { setRefreshing(false); }
-  };
-
-  const handleSnapshot = async () => {
-    setSnapshotting(true);
-    try {
-      await snapshotsApi.create();
-      toast.success('Snapshot enregistré');
-      fetchAll();
-    } catch { toast.error('Erreur'); }
-    finally { setSnapshotting(false); }
-  };
-
-  const handleOpenDialog = (asset = null) => {
-    if (asset) {
-      setEditingAsset(asset);
-      setFormData({
-        name: asset.name, asset_type: asset.asset_type, symbol: asset.symbol || '',
-        quantity: asset.quantity, purchase_price: asset.purchase_price,
-        purchase_date: asset.purchase_date || '', currency: asset.currency || 'EUR',
-        current_price: asset.current_price || '', tags: asset.tags || [], notes: asset.notes || ''
-      });
-    } else {
-      setEditingAsset(null);
-      setFormData({
-        name: '', asset_type: 'crypto', symbol: '', quantity: '',
-        purchase_price: '', purchase_date: '', currency: 'EUR',
-        current_price: '', tags: [], notes: ''
-      });
-    }
-    setDialogOpen(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    const data = {
-      ...formData,
-      quantity: parseFloat(formData.quantity),
-      purchase_price: parseFloat(formData.purchase_price),
-      current_price: formData.current_price ? parseFloat(formData.current_price) : null
-    };
-    try {
-      if (editingAsset) {
-        await portfolioApi.update(editingAsset.id, data);
-        toast.success('Actif mis à jour');
-      } else {
-        await portfolioApi.create(data);
-        toast.success('Actif ajouté');
-      }
-      setDialogOpen(false);
-      fetchAll();
-    } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
-    finally { setSaving(false); }
-  };
-
-  const handleDelete = async (asset) => {
-    if (!window.confirm(`Supprimer "${asset.name}" ?`)) return;
-    try {
-      await portfolioApi.delete(asset.id);
-      toast.success('Actif supprimé');
-      fetchAll();
-    } catch { toast.error('Erreur'); }
-  };
-
-  const handleSubmitTx = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await transactionsApi.create({
-        ...txForm,
-        quantity: parseFloat(txForm.quantity),
-        price_per_unit: parseFloat(txForm.price_per_unit),
-        fees: txForm.fees ? parseFloat(txForm.fees) : 0
-      });
-      toast.success('Transaction enregistrée');
-      setTxDialogOpen(false);
-      setTxForm({ asset_id: '', transaction_type: 'buy', quantity: '', price_per_unit: '', date: '', fees: '', notes: '' });
-      fetchAll();
-    } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
-    finally { setSaving(false); }
-  };
-
-  const handleDeleteTx = async (tx) => {
-    if (!window.confirm('Supprimer cette transaction ?')) return;
-    try {
-      await transactionsApi.delete(tx.id);
-      toast.success('Transaction supprimée');
-      fetchAll();
-    } catch { toast.error('Erreur'); }
-  };
-
-  const addTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
-      setNewTag('');
+      setStatusRows(s.data || []);
+      setDeposits(d.data || []);
+      setSales(v.data || []);
+      setPhysical(p.data || []);
+      setSnaps((w.data || []).sort((a, b) => String(a.date).localeCompare(String(b.date))));
+    } catch {
+      toast.error('Chargement portefeuille impossible');
+    } finally {
+      setLoading(false);
     }
   };
-  const removeTag = (t) => setFormData({ ...formData, tags: formData.tags.filter(x => x !== t) });
 
-  const fmt = (value, cur = 'EUR') => {
-    if (!value && value !== 0) return '-';
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
-  };
+  useEffect(() => { load(); }, []);
 
-  const getTypeInfo = (type) => ASSET_TYPES.find(t => t.value === type) || ASSET_TYPES[3];
+  const accountOptions = useMemo(() => {
+    const names = new Set();
+    statusRows.forEach((r) => names.add((r.name || '').trim()));
+    deposits.forEach((d) => names.add((d.account_name || '').trim()));
+    return [...names].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [statusRows, deposits]);
 
-  const filteredAssets = assets.filter(a => filterType === 'all' || a.asset_type === filterType);
-
-  const stats = (() => {
-    const s = { totalInvested: 0, totalCurrent: 0, byType: {} };
-    const target = filterType === 'all' ? assets : filteredAssets;
-    target.forEach(a => {
-      const inv = a.purchase_price * a.quantity;
-      const cur = (a.current_price || a.purchase_price) * a.quantity;
-      s.totalInvested += inv;
-      s.totalCurrent += cur;
-      if (!s.byType[a.asset_type]) s.byType[a.asset_type] = { invested: 0, current: 0 };
-      s.byType[a.asset_type].invested += inv;
-      s.byType[a.asset_type].current += cur;
+  const depositTotalsByAccount = useMemo(() => {
+    const map = {};
+    deposits.forEach((d) => {
+      const key = (d.account_name || '').trim();
+      if (!key) return;
+      if (!map[key]) map[key] = { invested: 0, sold: 0, total: 0 };
+      map[key].invested += n(d.invested);
+      map[key].sold += n(d.sold);
+      map[key].total += n(d.total);
     });
-    s.totalGain = s.totalCurrent - s.totalInvested;
-    s.gainPercent = s.totalInvested > 0 ? ((s.totalGain / s.totalInvested) * 100).toFixed(2) : 0;
-    return s;
-  })();
+    return map;
+  }, [deposits]);
 
-  const pieData = ASSET_TYPES.map((type, i) => ({
-    name: type.label, value: stats.byType[type.value]?.current || 0, color: CHART_COLORS[i]
-  })).filter(d => d.value > 0);
+  const enrichedStatusRows = useMemo(() => statusRows.map((r) => {
+    const account = (r.name || '').trim();
+    const dep = depositTotalsByAccount[account] || { invested: 0, sold: 0 };
+    const real = n(r.real);
+    const invested = n(dep.invested);
+    const sold = n(dep.sold);
+    const gain = real - invested + sold;
+    const perf = invested !== 0 && real !== 0 ? (gain / invested) * 100 : 0;
+    return { ...r, account, invested, sold, gain, perf };
+  }), [statusRows, depositTotalsByAccount]);
 
-  const barData = ASSET_TYPES.map(type => ({
-    name: type.label, investi: stats.byType[type.value]?.invested || 0, actuel: stats.byType[type.value]?.current || 0
-  })).filter(d => d.investi > 0 || d.actuel > 0);
+  const filteredStatusRows = useMemo(() => enrichedStatusRows.filter((r) => {
+    const q = statusSearch.trim().toLowerCase();
+    const okSearch = !q || r.account.toLowerCase().includes(q);
+    const okStatus = statusFilter === 'all' || r.status === statusFilter;
+    const okType = typeFilter === 'all' || r.account_type === typeFilter;
+    return okSearch && okStatus && okType;
+  }), [enrichedStatusRows, statusSearch, statusFilter, typeFilter]);
 
-  const evolutionData = snapshots.map(s => ({
-    date: s.date, total: Math.round(s.total_value),
-    ...Object.fromEntries(Object.entries(s.by_type || {}).map(([k, v]) => [k, Math.round(v)]))
-  }));
+  const recap = useMemo(() => {
+    const map = {};
+    let ti = 0; let ts = 0; let tr = 0;
+    enrichedStatusRows.forEach((r) => {
+      const t = r.account_type || 'other';
+      if (!map[t]) map[t] = { type: t, invested: 0, sold: 0, real: 0 };
+      map[t].invested += n(r.invested);
+      map[t].sold += n(r.sold);
+      map[t].real += n(r.real);
+      ti += n(r.invested); ts += n(r.sold); tr += n(r.real);
+    });
+    const rows = Object.values(map).map((x) => {
+      const gain = x.real - x.invested + x.sold;
+      return { ...x, gain, perf: x.invested !== 0 && x.real !== 0 ? (gain / x.invested) * 100 : 0 };
+    });
+    const gain = tr - ti + ts;
+    const total = { type: 'TOTAL', invested: ti, sold: ts, real: tr, gain, perf: ti !== 0 && tr !== 0 ? (gain / ti) * 100 : 0 };
+    const prop = rows.map((x) => ({ type: x.type, invested: ti ? (x.invested / ti) * 100 : 0, sold: ts ? (x.sold / ts) * 100 : 0, real: tr ? (x.real / tr) * 100 : 0, gain: gain ? (x.gain / gain) * 100 : 0 }));
+    prop.push({ type: 'TOTAL', invested: ti ? 100 : 0, sold: ts ? 100 : 0, real: tr ? 100 : 0, gain: gain ? 100 : 0 });
+    return { rows, total, prop };
+  }, [enrichedStatusRows]);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
-        </div>
-      </div>
-    );
-  }
+  const statusBarData = useMemo(() => recap.rows.map((r) => ({
+    type: TYPES.find((x) => x.value === r.type)?.label || r.type,
+    invested: r.invested,
+    real: r.real,
+  })), [recap]);
+
+  const filteredDeposits = useMemo(() => deposits.filter((d) => {
+    if (depositAccountFilter === 'all') return true;
+    return d.account_name === depositAccountFilter;
+  }), [deposits, depositAccountFilter]);
+
+  const depositsByAccount = useMemo(() => {
+    const map = {};
+    filteredDeposits.forEach((d) => {
+      const key = d.account_name || 'Sans compte';
+      if (!map[key]) map[key] = [];
+      map[key].push(d);
+    });
+    return Object.entries(map)
+      .map(([k, rows]) => ({ k, rows: rows.sort((a, b) => String(b.date).localeCompare(String(a.date))) }))
+      .sort((a, b) => a.k.localeCompare(b.k));
+  }, [filteredDeposits]);
+
+  const snapSeries = useMemo(() => snaps.map((s) => {
+    const gain = s.total_gain != null ? n(s.total_gain) : n(s.total_real) - n(s.total_invested) + n(s.total_sold);
+    const perf = s.total_perf_pct != null ? n(s.total_perf_pct) : (n(s.total_invested) !== 0 && n(s.total_real) !== 0 ? (gain / n(s.total_invested)) * 100 : 0);
+    return { ...s, total_net_invest: n(s.total_invested) - n(s.total_sold), total_gain_calc: gain, total_perf_calc: perf };
+  }), [snaps]);
+
+  const typeSeries = useMemo(() => {
+    const all = new Set();
+    snaps.forEach((s) => Object.keys(s.by_type || {}).forEach((t) => all.add(t)));
+    return [...all].sort().map((t) => ({
+      type: t,
+      data: snaps.map((s) => ({ date: s.date, invested: n(s.by_type?.[t]?.invested), real: n(s.by_type?.[t]?.real) })),
+    }));
+  }, [snaps]);
+
+  const clearStatusEdit = () => { setEditStatusId(null); setStatusForm(statusInitial); };
+  const clearDepositEdit = () => { setEditDepositId(null); setDepositForm(depositInitial); };
+  const clearSaleEdit = () => { setEditSaleId(null); setSaleForm(saleInitial); };
+  const clearPhysicalEdit = () => { setEditPhysicalId(null); setPhyForm(physicalInitial); };
+  const clearSnapEdit = () => { setEditSnapId(null); setSnapForm(snapInitial); setSnapTypeInputs(emptyTypeInputs()); };
+
+  const fillStatusEdit = (r) => { setEditStatusId(r.id); setStatusForm({ name: r.name || '', status: r.status || 'active', updated_date: r.updated_date || '', account_type: r.account_type || 'crypto', invested: String(n(r.invested)), sold: String(n(r.sold)), real: String(n(r.real)) }); };
+  const fillDepositEdit = (r) => { setEditDepositId(r.id); setDepositForm({ account_name: r.account_name || '', date: r.date || '', invested: String(n(r.invested)), sold: String(n(r.sold)), total: String(n(r.total)), comment: r.comment || '' }); };
+  const fillSaleEdit = (r) => { setEditSaleId(r.id); setSaleForm({ date: r.date || '', amount: String(n(r.amount)), source: r.source || '', received_on: r.received_on || '', comment: r.comment || '', sale_type: r.sale_type || 'Autres' }); };
+  const fillPhysicalEdit = (r) => { setEditPhysicalId(r.id); setPhyForm({ purchase_date: r.purchase_date || '', category: r.category || '', brand: r.brand || '', name: r.name || '', purchase_shop: r.purchase_shop || '', purchase_price: String(n(r.purchase_price)), valuation: String(n(r.valuation)), sale_price: String(n(r.sale_price)), sale_date: r.sale_date || '', sale_shop: r.sale_shop || '' }); };
+  const fillSnapEdit = (r) => {
+    setEditSnapId(r.id);
+    setSnapForm({ date: r.date || '', total_invested: String(n(r.total_invested)), total_sold: String(n(r.total_sold)), total_real: String(n(r.total_real)), total_gain: String(n(r.total_gain)), total_perf_pct: String(n(r.total_perf_pct)) });
+    const typed = emptyTypeInputs();
+    TYPES.forEach((t) => {
+      typed[t.value] = {
+        invested: String(n(r.by_type?.[t.value]?.invested)),
+        sold: String(n(r.by_type?.[t.value]?.sold)),
+        real: String(n(r.by_type?.[t.value]?.real)),
+      };
+    });
+    setSnapTypeInputs(typed);
+  };
+
+  const upsertStatus = async (e) => {
+    e.preventDefault();
+    const account = (statusForm.name || '').trim();
+    const dep = depositTotalsByAccount[account] || { invested: 0, sold: 0 };
+    const payload = { ...statusForm, name: account, invested: statusForm.invested === '' ? n(dep.invested) : n(statusForm.invested), sold: statusForm.sold === '' ? n(dep.sold) : n(statusForm.sold), real: n(statusForm.real) };
+    try {
+      if (editStatusId) await portfolioV2Api.updateStatus(editStatusId, payload); else await portfolioV2Api.createStatus(payload);
+      clearStatusEdit();
+      load();
+    } catch { toast.error('Enregistrement status impossible'); }
+  };
+
+  const upsertDeposit = async (e) => {
+    e.preventDefault();
+    const payload = { ...depositForm, invested: n(depositForm.invested), sold: n(depositForm.sold), total: depositForm.total === '' ? null : n(depositForm.total), comment: depositForm.comment || null };
+    try {
+      if (editDepositId) await portfolioV2Api.updateDeposit(editDepositId, payload); else await portfolioV2Api.createDeposit(payload);
+      clearDepositEdit();
+      load();
+    } catch { toast.error('Enregistrement dépôt impossible'); }
+  };
+
+  const upsertSale = async (e) => {
+    e.preventDefault();
+    const payload = { ...saleForm, amount: n(saleForm.amount) };
+    try {
+      if (editSaleId) await portfolioV2Api.updateSale(editSaleId, payload); else await portfolioV2Api.createSale(payload);
+      clearSaleEdit();
+      load();
+    } catch { toast.error('Enregistrement vente impossible'); }
+  };
+
+  const upsertPhysical = async (e) => {
+    e.preventDefault();
+    const payload = { ...phyForm, purchase_price: n(phyForm.purchase_price), valuation: n(phyForm.valuation), sale_price: n(phyForm.sale_price) };
+    try {
+      if (editPhysicalId) await portfolioV2Api.updatePhysicalAsset(editPhysicalId, payload); else await portfolioV2Api.createPhysicalAsset(payload);
+      clearPhysicalEdit();
+      load();
+    } catch { toast.error('Enregistrement actif physique impossible'); }
+  };
+
+  const upsertSnap = async (e) => {
+    e.preventDefault();
+    const byType = {};
+    TYPES.forEach((t) => {
+      const values = snapTypeInputs[t.value] || {};
+      const invested = n(values.invested);
+      const sold = n(values.sold);
+      const real = n(values.real);
+      if (invested !== 0 || sold !== 0 || real !== 0) {
+        const gain = real - invested + sold;
+        byType[t.value] = { invested, sold, real, gain, perf_pct: invested !== 0 && real !== 0 ? (gain / invested) * 100 : 0 };
+      }
+    });
+
+    const sumInvested = Object.values(byType).reduce((a, x) => a + n(x.invested), 0);
+    const sumSold = Object.values(byType).reduce((a, x) => a + n(x.sold), 0);
+    const sumReal = Object.values(byType).reduce((a, x) => a + n(x.real), 0);
+    const sumGain = sumReal - sumInvested + sumSold;
+
+    const payload = {
+      ...snapForm,
+      total_invested: snapForm.total_invested === '' ? (Object.keys(byType).length ? sumInvested : null) : n(snapForm.total_invested),
+      total_sold: snapForm.total_sold === '' ? (Object.keys(byType).length ? sumSold : null) : n(snapForm.total_sold),
+      total_real: snapForm.total_real === '' ? (Object.keys(byType).length ? sumReal : null) : n(snapForm.total_real),
+      total_gain: snapForm.total_gain === '' ? (Object.keys(byType).length ? sumGain : null) : n(snapForm.total_gain),
+      total_perf_pct: snapForm.total_perf_pct === '' ? null : n(snapForm.total_perf_pct),
+      by_type: Object.keys(byType).length ? byType : null,
+    };
+
+    try {
+      if (editSnapId) await portfolioV2Api.updateSnapshot(editSnapId, payload); else await portfolioV2Api.createSnapshot(payload);
+      clearSnapEdit();
+      load();
+    } catch { toast.error('Enregistrement snapshot impossible'); }
+  };
+
+  const del = async (fn, id) => {
+    if (!window.confirm('Supprimer ?')) return;
+    try { await fn(id); load(); } catch { toast.error('Suppression impossible'); }
+  };
+
+  if (loading) return <div className="space-y-4"><Skeleton className="h-8 w-60" /><Skeleton className="h-80 w-full" /></div>;
+
+  const investDonut = recap.rows.filter((r) => n(r.invested) > 0).map((r, i) => ({ name: TYPES.find((x) => x.value === r.type)?.label || r.type, value: n(r.invested), color: PIE_COLORS[i % PIE_COLORS.length] }));
+  const realDonut = recap.rows.filter((r) => n(r.real) > 0).map((r, i) => ({ name: TYPES.find((x) => x.value === r.type)?.label || r.type, value: n(r.real), color: PIE_COLORS[i % PIE_COLORS.length] }));
 
   return (
-    <div className="space-y-6" data-testid="portfolio-page">
-      <div className="flex flex-col md:flex-row justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Portefeuille</h1>
-          <p className="text-muted-foreground mt-1">Suivez vos investissements</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleSnapshot} disabled={snapshotting} data-testid="snapshot-btn">
-            {snapshotting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Camera className="h-4 w-4 mr-2" />}
-            Snapshot
-          </Button>
-          <Button variant="outline" onClick={handleRefreshPrices} disabled={refreshing} data-testid="refresh-prices-btn">
-            {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Actualiser
-          </Button>
-          <Button variant="outline" onClick={() => setTxDialogOpen(true)} data-testid="add-transaction-btn">
-            <ArrowRightLeft className="h-4 w-4 mr-2" />Transaction
-          </Button>
-          <Button onClick={() => handleOpenDialog()} data-testid="add-asset-btn">
-            <Plus className="h-4 w-4 mr-2" />Nouvel actif
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-card border-border" data-testid="total-invested-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total investi</CardTitle>
-          </CardHeader>
-          <CardContent><p className="text-2xl font-bold font-mono">{fmt(stats.totalInvested)}</p></CardContent>
-        </Card>
-        <Card className="bg-card border-border" data-testid="total-current-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Valeur actuelle</CardTitle>
-          </CardHeader>
-          <CardContent><p className="text-2xl font-bold font-mono">{fmt(stats.totalCurrent)}</p></CardContent>
-        </Card>
-        <Card className="bg-card border-border" data-testid="total-gain-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Gain/Perte</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              {stats.totalGain >= 0 ? <ArrowUpRight className="h-5 w-5 text-emerald-400" /> : <ArrowDownRight className="h-5 w-5 text-red-400" />}
-              <p className={`text-2xl font-bold font-mono ${stats.totalGain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(stats.totalGain)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border" data-testid="gain-percent-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold font-mono ${stats.totalGain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {stats.totalGain >= 0 ? '+' : ''}{stats.gainPercent}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filter */}
-      <div className="flex gap-4">
-        <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-[180px]" data-testid="portfolio-filter-type">
-            <SelectValue placeholder="Tous les types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les types</SelectItem>
-            {ASSET_TYPES.map(type => (
-              <SelectItem key={type.value} value={type.value}>
-                <div className="flex items-center gap-2">
-                  <type.icon className={`h-4 w-4 ${type.color}`} />{type.label}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Tabs defaultValue="assets" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="assets" data-testid="assets-tab">Actifs ({filteredAssets.length})</TabsTrigger>
-          <TabsTrigger value="charts" data-testid="charts-tab">Graphiques</TabsTrigger>
-          <TabsTrigger value="evolution" data-testid="evolution-tab">Évolution</TabsTrigger>
-          <TabsTrigger value="transactions" data-testid="transactions-tab">Transactions ({transactions.length})</TabsTrigger>
+    <div className="space-y-6" data-testid="portfolio-v2-page">
+      <div><h1 className="text-3xl font-bold">Portefeuille</h1><p className="text-muted-foreground">Comptes, recap par type, dépôts, ventes, actifs physiques et snapshots</p></div>
+      <Tabs defaultValue="status" className="space-y-4">
+        <TabsList className="grid grid-cols-2 md:grid-cols-6 gap-1 h-auto">
+          <TabsTrigger value="status">Status</TabsTrigger><TabsTrigger value="recap">Recap</TabsTrigger><TabsTrigger value="depot">Dépôt</TabsTrigger><TabsTrigger value="vente">Vente</TabsTrigger><TabsTrigger value="physique">Actif physique</TabsTrigger><TabsTrigger value="suivi">Suivi Hebdo</TabsTrigger>
         </TabsList>
 
-        {/* Assets Tab */}
-        <TabsContent value="assets">
-          {filteredAssets.length === 0 ? (
-            <Card className="bg-card border-border border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Aucun actif</h3>
-                <p className="text-sm text-muted-foreground mb-4">Ajoutez vos premiers investissements</p>
-                <Button onClick={() => handleOpenDialog()} data-testid="empty-add-asset-btn">
-                  <Plus className="h-4 w-4 mr-2" />Ajouter un actif
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredAssets.map(asset => {
-                const typeInfo = getTypeInfo(asset.asset_type);
-                const invested = asset.purchase_price * asset.quantity;
-                const current = (asset.current_price || asset.purchase_price) * asset.quantity;
-                const gain = current - invested;
-                const gainPct = invested > 0 ? ((gain / invested) * 100).toFixed(2) : 0;
-                return (
-                  <Card key={asset.id} className="bg-card border-border card-hover group cursor-pointer"
-                    onClick={() => handleOpenDialog(asset)} data-testid={`asset-card-${asset.id}`}>
-                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`p-2 rounded-md ${typeInfo.bgColor}/20`}>
-                          <typeInfo.icon className={`h-4 w-4 ${typeInfo.color}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-lg truncate">{asset.name}</CardTitle>
-                          {asset.symbol && <Badge variant="outline" className="mt-1 font-mono text-xs">{asset.symbol}</Badge>}
-                        </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 transition-opacity"
-                            onClick={e => e.stopPropagation()}>
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => { setTxForm({...txForm, asset_id: asset.id}); setTxDialogOpen(true); }}>
-                            <ArrowRightLeft className="h-4 w-4 mr-2" />Transaction
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleOpenDialog(asset)}>
-                            <Pencil className="h-4 w-4 mr-2" />Modifier
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(asset)} className="text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Quantité</span>
-                          <span className="font-mono">{asset.quantity}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">PRU</span>
-                          <span className="font-mono">{fmt(asset.purchase_price)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Prix actuel</span>
-                          <span className="font-mono">{asset.current_price ? fmt(asset.current_price) : '-'}</span>
-                        </div>
-                        <div className="border-t border-border pt-2 mt-2">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Valeur</span>
-                            <span className="font-mono font-bold">{fmt(current)}</span>
-                          </div>
-                          <div className="flex justify-between items-center mt-1">
-                            <span className="text-muted-foreground">P&L</span>
-                            <div className="flex items-center gap-1">
-                              {gain >= 0 ? <ArrowUpRight className="h-4 w-4 text-emerald-400" /> : <ArrowDownRight className="h-4 w-4 text-red-400" />}
-                              <span className={`font-mono font-bold ${gain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {gain >= 0 ? '+' : ''}{gainPct}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+        <TabsContent value="status" className="space-y-4">
+          <Card><CardHeader><CardTitle>Filtres Status</CardTitle></CardHeader><CardContent><div className="grid grid-cols-1 md:grid-cols-4 gap-2"><div><Label>Recherche compte</Label><Input value={statusSearch} onChange={(e) => setStatusSearch(e.target.value)} placeholder="Ex: PEA" /></div><div><Label>Etat</Label><select className="w-full border rounded-md h-10 px-3 bg-background" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="all">Tous</option><option value="active">Actif</option><option value="inactive">Inactif</option></select></div><div><Label>Type</Label><select className="w-full border rounded-md h-10 px-3 bg-background" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="all">Tous</option>{TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div></div></CardContent></Card>
+          <Card><CardHeader><CardTitle>Investi vs Réel par type d'actif</CardTitle></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusBarData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="type" /><YAxis /><Tooltip formatter={(v) => euro(v)} /><Legend /><Bar dataKey="invested" name="Investi" fill="#ef4444" /><Bar dataKey="real" name="Réel" fill="#22c55e" /></BarChart></ResponsiveContainer></div></CardContent></Card>
+          <Card><CardHeader><CardTitle>{editStatusId ? 'Modifier compte Status' : 'Ajouter compte Status'}</CardTitle></CardHeader><CardContent><form onSubmit={upsertStatus} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end"><div><Label>Compte</Label><Input list="status-account-options" value={statusForm.name} onChange={(e) => setStatusForm({ ...statusForm, name: e.target.value })} required /><datalist id="status-account-options">{accountOptions.map((a) => <option key={a} value={a} />)}</datalist></div><div><Label>Etat</Label><select className="w-full border rounded-md h-10 px-3 bg-background" value={statusForm.status} onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}><option value="active">Actif</option><option value="inactive">Inactif</option></select></div><div><Label>Date maj</Label><Input type="date" value={statusForm.updated_date} onChange={(e) => setStatusForm({ ...statusForm, updated_date: e.target.value })} /></div><div><Label>Type</Label><select className="w-full border rounded-md h-10 px-3 bg-background" value={statusForm.account_type} onChange={(e) => setStatusForm({ ...statusForm, account_type: e.target.value })}>{TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div><div><Label>Montant investi</Label><Input type="number" step="0.01" value={statusForm.invested} onChange={(e) => setStatusForm({ ...statusForm, invested: e.target.value })} /></div><div><Label>Montant vendu</Label><Input type="number" step="0.01" value={statusForm.sold} onChange={(e) => setStatusForm({ ...statusForm, sold: e.target.value })} /></div><div><Label>Montant réel</Label><Input type="number" step="0.01" value={statusForm.real} onChange={(e) => setStatusForm({ ...statusForm, real: e.target.value })} /></div><div className="flex gap-2"><Button type="submit"><Plus className="h-4 w-4 mr-1" />{editStatusId ? 'Maj' : 'Ajouter'}</Button>{editStatusId && <Button type="button" variant="outline" onClick={clearStatusEdit}><X className="h-4 w-4" /></Button>}</div></form></CardContent></Card>
+          <Card className="overflow-hidden"><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[1150px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Compte</th><th className="p-3">Etat</th><th className="p-3">Date maj</th><th className="p-3">Type</th><th className="p-3">Montant Invest</th><th className="p-3">Montant vendu</th><th className="p-3">Montant réel</th><th className="p-3">Perte/Gain</th><th className="p-3">%</th><th className="p-3"></th></tr></thead><tbody>{filteredStatusRows.map((r, idx) => <tr key={r.id} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3 font-medium">{r.account}</td><td className="p-3">{r.status === 'active' ? 'Actif' : 'Inactif'}</td><td className="p-3">{r.updated_date || '-'}</td><td className="p-3">{TYPES.find((x) => x.value === r.account_type)?.label || r.account_type}</td><td className="p-3 font-mono">{euro(r.invested)}</td><td className="p-3 font-mono">{euro(r.sold)}</td><td className="p-3 font-mono">{euro(r.real)}</td><td className="p-3 font-mono">{euro(r.gain)}</td><td className="p-3 font-mono">{pct(r.perf)}</td><td className="p-3 space-x-1"><Button size="icon" variant="ghost" onClick={() => fillStatusEdit(r)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(portfolioV2Api.deleteStatus, r.id)}><Trash2 className="h-4 w-4" /></Button></td></tr>)}<tr className="font-semibold border-t"><td className="p-3">TOTAL</td><td className="p-3"></td><td className="p-3"></td><td className="p-3"></td><td className="p-3">{euro(recap.total.invested)}</td><td className="p-3">{euro(recap.total.sold)}</td><td className="p-3">{euro(recap.total.real)}</td><td className="p-3">{euro(recap.total.gain)}</td><td className="p-3">{pct(recap.total.perf)}</td><td className="p-3"></td></tr></tbody></table></CardContent></Card>
         </TabsContent>
 
-        {/* Charts Tab */}
-        <TabsContent value="charts">
-          {assets.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-card border-border" data-testid="allocation-chart">
-                <CardHeader><CardTitle className="text-lg">Allocation</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
-                          {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                        </Pie>
-                        <Tooltip formatter={v => fmt(v)} contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: '8px', color: '#fafafa' }} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-card border-border" data-testid="comparison-chart">
-                <CardHeader><CardTitle className="text-lg">Investi vs Actuel</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barData}>
-                        <XAxis dataKey="name" tick={{ fill: '#a1a1aa' }} />
-                        <YAxis tick={{ fill: '#a1a1aa' }} />
-                        <Tooltip formatter={v => fmt(v)} contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: '8px', color: '#fafafa' }} />
-                        <Legend />
-                        <Bar dataKey="investi" name="Investi" fill="#6b7280" />
-                        <Bar dataKey="actuel" name="Actuel" fill="#10b981" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <Card className="bg-card border-border border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <LineChart className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">Ajoutez des actifs pour voir les graphiques</p>
-              </CardContent>
-            </Card>
-          )}
+        <TabsContent value="recap" className="space-y-4">
+          <Card><CardHeader><CardTitle>Investi vs Réel par type d'actif</CardTitle></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusBarData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="type" /><YAxis /><Tooltip formatter={(v) => euro(v)} /><Legend /><Bar dataKey="invested" name="Investi" fill="#ef4444" /><Bar dataKey="real" name="Réel" fill="#22c55e" /></BarChart></ResponsiveContainer></div></CardContent></Card>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card><CardHeader><CardTitle>Proportion investi par type</CardTitle></CardHeader><CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={investDonut} dataKey="value" nameKey="name" outerRadius={90} label>{investDonut.map((entry, i) => <Cell key={i} fill={entry.color} />)}</Pie><Tooltip formatter={(v) => euro(v)} /><Legend /></PieChart></ResponsiveContainer></div></CardContent></Card>
+            <Card><CardHeader><CardTitle>Proportion réel par type</CardTitle></CardHeader><CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={realDonut} dataKey="value" nameKey="name" outerRadius={90} label>{realDonut.map((entry, i) => <Cell key={i} fill={entry.color} />)}</Pie><Tooltip formatter={(v) => euro(v)} /><Legend /></PieChart></ResponsiveContainer></div></CardContent></Card>
+          </div>
+          <Card className="overflow-hidden"><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[700px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Type</th><th className="p-3">Investi</th><th className="p-3">Vente</th><th className="p-3">Réel</th><th className="p-3">Gain</th><th className="p-3">%</th></tr></thead><tbody>{recap.rows.map((r, idx) => <tr key={r.type} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3">{TYPES.find((x) => x.value === r.type)?.label || r.type}</td><td className="p-3">{euro(r.invested)}</td><td className="p-3">{euro(r.sold)}</td><td className="p-3">{euro(r.real)}</td><td className="p-3">{euro(r.gain)}</td><td className="p-3">{pct(r.perf)}</td></tr>)}<tr className="font-semibold border-t"><td className="p-3">TOTAL</td><td className="p-3">{euro(recap.total.invested)}</td><td className="p-3">{euro(recap.total.sold)}</td><td className="p-3">{euro(recap.total.real)}</td><td className="p-3">{euro(recap.total.gain)}</td><td className="p-3">{pct(recap.total.perf)}</td></tr></tbody></table></CardContent></Card>
         </TabsContent>
 
-        {/* Evolution Tab */}
-        <TabsContent value="evolution">
-          {evolutionData.length > 1 ? (
-            <Card className="bg-card border-border" data-testid="evolution-chart">
-              <CardHeader>
-                <CardTitle className="text-lg">Évolution de la valeur du portefeuille</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={evolutionData}>
-                      <defs>
-                        <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="date" tick={{ fill: '#a1a1aa', fontSize: 11 }} />
-                      <YAxis tick={{ fill: '#a1a1aa' }} />
-                      <Tooltip formatter={v => fmt(v)} contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: '8px', color: '#fafafa' }} />
-                      <Area type="monotone" dataKey="total" name="Total" stroke="#10b981" fill="url(#gradTotal)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Utilisez le bouton "Snapshot" pour enregistrer la valeur actuelle
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="bg-card border-border border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Camera className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Pas assez de données</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Créez des snapshots régulièrement pour voir l'évolution
-                </p>
-                <Button variant="outline" onClick={handleSnapshot} disabled={snapshotting}>
-                  <Camera className="h-4 w-4 mr-2" />Créer un snapshot
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+        <TabsContent value="depot" className="space-y-4">
+          <Card><CardHeader><CardTitle>{editDepositId ? 'Modifier dépôt' : 'Ajouter dépôt'}</CardTitle></CardHeader><CardContent><form onSubmit={upsertDeposit} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end"><div><Label>Compte</Label><Input list="deposit-account-options" value={depositForm.account_name} onChange={(e) => setDepositForm({ ...depositForm, account_name: e.target.value })} required /><datalist id="deposit-account-options">{accountOptions.map((a) => <option key={a} value={a} />)}</datalist></div><div><Label>Date</Label><Input type="date" value={depositForm.date} onChange={(e) => setDepositForm({ ...depositForm, date: e.target.value })} required /></div><div><Label>Investi</Label><Input type="number" step="0.01" value={depositForm.invested} onChange={(e) => setDepositForm({ ...depositForm, invested: e.target.value })} /></div><div><Label>Vente</Label><Input type="number" step="0.01" value={depositForm.sold} onChange={(e) => setDepositForm({ ...depositForm, sold: e.target.value })} /></div><div><Label>Total</Label><Input type="number" step="0.01" value={depositForm.total} onChange={(e) => setDepositForm({ ...depositForm, total: e.target.value })} /></div><div><Label>Commentaire</Label><Input value={depositForm.comment} onChange={(e) => setDepositForm({ ...depositForm, comment: e.target.value })} /></div><div className="flex gap-2"><Button type="submit"><Plus className="h-4 w-4 mr-1" />{editDepositId ? 'Maj' : 'Ajouter'}</Button>{editDepositId && <Button type="button" variant="outline" onClick={clearDepositEdit}><X className="h-4 w-4" /></Button>}</div></form></CardContent></Card>
+          <Card><CardContent className="pt-4"><div className="flex gap-2 items-center"><Label>Filtre compte</Label><select className="border rounded-md h-10 px-3 bg-background" value={depositAccountFilter} onChange={(e) => setDepositAccountFilter(e.target.value)}><option value="all">Tous</option>{accountOptions.map((a) => <option key={a} value={a}>{a}</option>)}</select></div></CardContent></Card>
+          {depositsByAccount.map((g) => { const t = g.rows.reduce((a, r) => ({ i: a.i + n(r.invested), s: a.s + n(r.sold), t: a.t + n(r.total) }), { i: 0, s: 0, t: 0 }); return <Card key={g.k} className="overflow-hidden"><CardHeader><CardTitle>{g.k}</CardTitle></CardHeader><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[900px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Date</th><th className="p-3">Investi</th><th className="p-3">Vente</th><th className="p-3">Total</th><th className="p-3">Commentaire</th><th className="p-3"></th></tr></thead><tbody>{g.rows.map((r, idx) => <tr key={r.id} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3">{r.date}</td><td className="p-3">{euro(r.invested)}</td><td className="p-3">{euro(r.sold)}</td><td className="p-3">{euro(r.total)}</td><td className="p-3">{r.comment || '-'}</td><td className="p-3 space-x-1"><Button size="icon" variant="ghost" onClick={() => fillDepositEdit(r)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(portfolioV2Api.deleteDeposit, r.id)}><Trash2 className="h-4 w-4" /></Button></td></tr>)}<tr className="font-semibold border-t"><td className="p-3">TOTAL</td><td className="p-3">{euro(t.i)}</td><td className="p-3">{euro(t.s)}</td><td className="p-3">{euro(t.t)}</td><td className="p-3"></td><td className="p-3"></td></tr></tbody></table></CardContent></Card>; })}
         </TabsContent>
 
-        {/* Transactions Tab */}
-        <TabsContent value="transactions">
-          {transactions.length === 0 ? (
-            <Card className="bg-card border-border border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <ArrowRightLeft className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Aucune transaction</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Enregistrez vos achats et ventes pour suivre la plus-value
-                </p>
-                <Button onClick={() => setTxDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />Ajouter une transaction
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {transactions.map(tx => (
-                <Card key={tx.id} className="bg-card border-border card-hover" data-testid={`tx-card-${tx.id}`}>
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'secondary'}
-                          className={tx.transaction_type === 'buy' ? 'bg-emerald-600' : 'bg-red-600'}>
-                          {tx.transaction_type === 'buy' ? 'Achat' : 'Vente'}
-                        </Badge>
-                        <div>
-                          <p className="font-medium">{tx.asset_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {tx.quantity} x {fmt(tx.price_per_unit)} = {fmt(tx.total)}
-                            {tx.fees > 0 && ` (frais: ${fmt(tx.fees)})`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">{tx.date}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteTx(tx)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+        <TabsContent value="vente" className="space-y-4">
+          <Card><CardHeader><CardTitle>{editSaleId ? 'Modifier vente' : 'Ajouter vente'}</CardTitle></CardHeader><CardContent><form onSubmit={upsertSale} className="grid grid-cols-1 md:grid-cols-7 gap-2 items-end"><div><Label>Date</Label><Input type="date" value={saleForm.date} onChange={(e) => setSaleForm({ ...saleForm, date: e.target.value })} required /></div><div><Label>Montant</Label><Input type="number" step="0.01" value={saleForm.amount} onChange={(e) => setSaleForm({ ...saleForm, amount: e.target.value })} required /></div><div><Label>Provenance</Label><Input value={saleForm.source} onChange={(e) => setSaleForm({ ...saleForm, source: e.target.value })} required /></div><div><Label>Reçu sur</Label><Input value={saleForm.received_on} onChange={(e) => setSaleForm({ ...saleForm, received_on: e.target.value })} required /></div><div><Label>Type</Label><select className="w-full border rounded-md h-10 px-3 bg-background" value={saleForm.sale_type} onChange={(e) => setSaleForm({ ...saleForm, sale_type: e.target.value })}>{SALE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div><div className="flex gap-2"><Button type="submit"><Plus className="h-4 w-4 mr-1" />{editSaleId ? 'Maj' : 'Ajouter'}</Button>{editSaleId && <Button type="button" variant="outline" onClick={clearSaleEdit}><X className="h-4 w-4" /></Button>}</div><div className="md:col-span-7"><Label>Commentaire</Label><Textarea value={saleForm.comment} onChange={(e) => setSaleForm({ ...saleForm, comment: e.target.value })} /></div></form></CardContent></Card>
+          <Card className="overflow-hidden"><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[930px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Date</th><th className="p-3">Montant</th><th className="p-3">Provenance</th><th className="p-3">Reçu sur</th><th className="p-3">Commentaire</th><th className="p-3">Type</th><th className="p-3"></th></tr></thead><tbody>{sales.map((r, idx) => <tr key={r.id} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3">{r.date}</td><td className="p-3">{euro(r.amount)}</td><td className="p-3">{r.source}</td><td className="p-3">{r.received_on}</td><td className="p-3">{r.comment || '-'}</td><td className="p-3">{r.sale_type}</td><td className="p-3 space-x-1"><Button size="icon" variant="ghost" onClick={() => fillSaleEdit(r)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(portfolioV2Api.deleteSale, r.id)}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table></CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="physique" className="space-y-4">
+          <Card><CardHeader><CardTitle>{editPhysicalId ? 'Modifier actif physique' : 'Ajouter actif physique'}</CardTitle></CardHeader><CardContent><form onSubmit={upsertPhysical} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end"><div><Label>Date Achat</Label><Input type="date" value={phyForm.purchase_date} onChange={(e) => setPhyForm({ ...phyForm, purchase_date: e.target.value })} /></div><div><Label>Catégorie</Label><Input value={phyForm.category} onChange={(e) => setPhyForm({ ...phyForm, category: e.target.value })} /></div><div><Label>Marque</Label><Input value={phyForm.brand} onChange={(e) => setPhyForm({ ...phyForm, brand: e.target.value })} /></div><div><Label>Nom</Label><Input value={phyForm.name} onChange={(e) => setPhyForm({ ...phyForm, name: e.target.value })} required /></div><div><Label>Boutique achat</Label><Input value={phyForm.purchase_shop} onChange={(e) => setPhyForm({ ...phyForm, purchase_shop: e.target.value })} /></div><div><Label>Prix Achat</Label><Input type="number" step="0.01" value={phyForm.purchase_price} onChange={(e) => setPhyForm({ ...phyForm, purchase_price: e.target.value })} /></div><div><Label>Valorisation</Label><Input type="number" step="0.01" value={phyForm.valuation} onChange={(e) => setPhyForm({ ...phyForm, valuation: e.target.value })} /></div><div><Label>Prix Vente</Label><Input type="number" step="0.01" value={phyForm.sale_price} onChange={(e) => setPhyForm({ ...phyForm, sale_price: e.target.value })} /></div><div><Label>Date Vente</Label><Input type="date" value={phyForm.sale_date} onChange={(e) => setPhyForm({ ...phyForm, sale_date: e.target.value })} /></div><div><Label>Boutique vente</Label><Input value={phyForm.sale_shop} onChange={(e) => setPhyForm({ ...phyForm, sale_shop: e.target.value })} /></div><div className="flex gap-2"><Button type="submit"><Plus className="h-4 w-4 mr-1" />{editPhysicalId ? 'Maj' : 'Ajouter'}</Button>{editPhysicalId && <Button type="button" variant="outline" onClick={clearPhysicalEdit}><X className="h-4 w-4" /></Button>}</div></form>{editPhysicalId && <div className="mt-4 space-y-3"><ItemLinksManager itemType="portfolio_physical" itemId={editPhysicalId} itemName={phyForm.name || 'Actif physique'} onUpdate={load} /><FileUploader itemType="portfolio_physical" itemId={editPhysicalId} onUpdate={load} /></div>}</CardContent></Card>
+          <Card className="overflow-hidden"><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[1250px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Date Achat</th><th className="p-3">Catégorie</th><th className="p-3">Marque</th><th className="p-3">Nom</th><th className="p-3">Boutique achat</th><th className="p-3">Prix Achat</th><th className="p-3">Valorisation</th><th className="p-3">Prix Vente</th><th className="p-3">Date Vente</th><th className="p-3">Boutique Vente</th><th className="p-3">Marge</th><th className="p-3"></th></tr></thead><tbody>{physical.map((r, idx) => <tr key={r.id} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3">{r.purchase_date || '-'}</td><td className="p-3">{r.category || '-'}</td><td className="p-3">{r.brand || '-'}</td><td className="p-3">{r.name}</td><td className="p-3">{r.purchase_shop || '-'}</td><td className="p-3">{euro(r.purchase_price)}</td><td className="p-3">{euro(r.valuation)}</td><td className="p-3">{euro(r.sale_price)}</td><td className="p-3">{r.sale_date || '-'}</td><td className="p-3">{r.sale_shop || '-'}</td><td className="p-3">{euro(r.margin)}</td><td className="p-3 space-x-1"><Button size="icon" variant="ghost" onClick={() => fillPhysicalEdit(r)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(portfolioV2Api.deletePhysicalAsset, r.id)}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table></CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="suivi" className="space-y-4">
+          <Card><CardHeader><CardTitle>{editSnapId ? 'Modifier snapshot' : 'Créer snapshot manuel'} (avec détail par type)</CardTitle></CardHeader><CardContent><form onSubmit={upsertSnap} className="space-y-3"><div className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end"><div><Label>Date</Label><Input type="date" value={snapForm.date} onChange={(e) => setSnapForm({ ...snapForm, date: e.target.value })} required /></div><div><Label>Total investi</Label><Input type="number" step="0.01" value={snapForm.total_invested} onChange={(e) => setSnapForm({ ...snapForm, total_invested: e.target.value })} /></div><div><Label>Total vente</Label><Input type="number" step="0.01" value={snapForm.total_sold} onChange={(e) => setSnapForm({ ...snapForm, total_sold: e.target.value })} /></div><div><Label>Total réel</Label><Input type="number" step="0.01" value={snapForm.total_real} onChange={(e) => setSnapForm({ ...snapForm, total_real: e.target.value })} /></div><div><Label>Total gain</Label><Input type="number" step="0.01" value={snapForm.total_gain} onChange={(e) => setSnapForm({ ...snapForm, total_gain: e.target.value })} /></div><div><Label>Total perf %</Label><Input type="number" step="0.01" value={snapForm.total_perf_pct} onChange={(e) => setSnapForm({ ...snapForm, total_perf_pct: e.target.value })} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">{TYPES.map((t) => <div key={t.value} className="border rounded-md p-2 bg-muted/20"><p className="text-xs font-semibold mb-2">{t.label}</p><div className="space-y-1"><Input type="number" step="0.01" placeholder="Investi" value={snapTypeInputs[t.value]?.invested || ''} onChange={(e) => setSnapTypeInputs((prev) => ({ ...prev, [t.value]: { ...prev[t.value], invested: e.target.value } }))} /><Input type="number" step="0.01" placeholder="Vente" value={snapTypeInputs[t.value]?.sold || ''} onChange={(e) => setSnapTypeInputs((prev) => ({ ...prev, [t.value]: { ...prev[t.value], sold: e.target.value } }))} /><Input type="number" step="0.01" placeholder="Réel" value={snapTypeInputs[t.value]?.real || ''} onChange={(e) => setSnapTypeInputs((prev) => ({ ...prev, [t.value]: { ...prev[t.value], real: e.target.value } }))} /></div></div>)}</div><div className="flex gap-2"><Button type="submit"><Plus className="h-4 w-4 mr-1" />{editSnapId ? 'Maj' : 'Snapshot'}</Button>{editSnapId && <Button type="button" variant="outline" onClick={clearSnapEdit}><X className="h-4 w-4" /></Button>}</div></form></CardContent></Card>
+          <Card><CardHeader><CardTitle>Total investi/réel</CardTitle></CardHeader><CardContent><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={snapSeries}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(v) => euro(v)} /><Legend /><Line dataKey="total_invested" stroke="#ef4444" name="Montant investi" /><Line dataKey="total_real" stroke="#22c55e" name="Valeur actuelle" /></LineChart></ResponsiveContainer></div></CardContent></Card>
+          {typeSeries.map((s) => <Card key={s.type}><CardHeader><CardTitle>Evolution {TYPES.find((x) => x.value === s.type)?.label || s.type}</CardTitle></CardHeader><CardContent><div className="h-56"><ResponsiveContainer width="100%" height="100%"><LineChart data={s.data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(v) => euro(v)} /><Legend /><Line dataKey="invested" stroke="#ef4444" name="Montant investi" /><Line dataKey="real" stroke="#22c55e" name="Valeur actuelle" /></LineChart></ResponsiveContainer></div></CardContent></Card>)}
+          <Card><CardContent className="pt-0 overflow-auto"><table className="w-full text-sm min-w-[1300px]"><thead className="bg-muted/50"><tr className="text-left"><th className="p-3">Date</th><th className="p-3">Total Invest (Investi - Vente)</th><th className="p-3">Total Réel</th><th className="p-3">Total Gain</th><th className="p-3">Total Perf %</th>{TYPES.map((t) => <th key={t.value} className="p-3">{t.label} (Inv/Réel)</th>)}<th className="p-3"></th></tr></thead><tbody>{snapSeries.map((r, idx) => <tr key={r.id} className={idx % 2 ? 'bg-muted/20' : ''}><td className="p-3">{r.date}</td><td className="p-3">{euro(r.total_net_invest)}</td><td className="p-3">{euro(r.total_real)}</td><td className="p-3">{euro(r.total_gain_calc)}</td><td className="p-3">{pct(r.total_perf_calc)}</td>{TYPES.map((t) => <td key={t.value} className="p-3">{euro(r.by_type?.[t.value]?.invested)} / {euro(r.by_type?.[t.value]?.real)}</td>)}<td className="p-3 space-x-1"><Button size="icon" variant="ghost" onClick={() => fillSnapEdit(r)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(portfolioV2Api.deleteSnapshot, r.id)}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table></CardContent></Card>
         </TabsContent>
       </Tabs>
-
-      {/* Asset Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <form onSubmit={handleSubmit}>
-            <DialogHeader>
-              <DialogTitle>{editingAsset ? "Modifier l'actif" : 'Nouvel actif'}</DialogTitle>
-              <DialogDescription>Ajoutez un actif à votre portefeuille</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="name">Nom *</Label>
-                  <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                    placeholder="Ex: Bitcoin, Apple" required data-testid="asset-name-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={formData.asset_type} onValueChange={v => setFormData({...formData, asset_type: v})}>
-                    <SelectTrigger data-testid="asset-type-select"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ASSET_TYPES.map(t => (
-                        <SelectItem key={t.value} value={t.value}>
-                          <div className="flex items-center gap-2"><t.icon className={`h-4 w-4 ${t.color}`} />{t.label}</div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="symbol">Symbole</Label>
-                  <Input id="symbol" value={formData.symbol} onChange={e => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
-                    placeholder="BTC, AAPL" data-testid="asset-symbol-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantité *</Label>
-                  <Input id="quantity" type="number" step="any" value={formData.quantity}
-                    onChange={e => setFormData({...formData, quantity: e.target.value})} required data-testid="asset-quantity-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchase_price">Prix d'achat unitaire *</Label>
-                  <Input id="purchase_price" type="number" step="0.01" value={formData.purchase_price}
-                    onChange={e => setFormData({...formData, purchase_price: e.target.value})} required data-testid="asset-purchase-price-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="current_price">Prix actuel unitaire</Label>
-                  <Input id="current_price" type="number" step="0.01" value={formData.current_price}
-                    onChange={e => setFormData({...formData, current_price: e.target.value})} data-testid="asset-current-price-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchase_date">Date d'achat</Label>
-                  <Input id="purchase_date" type="date" value={formData.purchase_date}
-                    onChange={e => setFormData({...formData, purchase_date: e.target.value})} data-testid="asset-purchase-date-input" />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea id="notes" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}
-                    placeholder="Notes..." data-testid="asset-notes-input" />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Tags</Label>
-                  <div className="flex gap-2">
-                    <Input value={newTag} onChange={e => setNewTag(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                      placeholder="Ajouter un tag..." data-testid="asset-tag-input" />
-                    <Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button>
-                  </div>
-                  {formData.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {formData.tags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="gap-1">
-                          {tag}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={saving} data-testid="asset-submit-btn">
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingAsset ? 'Mettre à jour' : 'Ajouter'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Transaction Dialog */}
-      <Dialog open={txDialogOpen} onOpenChange={setTxDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <form onSubmit={handleSubmitTx}>
-            <DialogHeader>
-              <DialogTitle>Nouvelle transaction</DialogTitle>
-              <DialogDescription>Enregistrez un achat ou une vente</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Actif *</Label>
-                <Select value={txForm.asset_id} onValueChange={v => setTxForm({...txForm, asset_id: v})}>
-                  <SelectTrigger data-testid="tx-asset-select"><SelectValue placeholder="Sélectionner un actif" /></SelectTrigger>
-                  <SelectContent>
-                    {assets.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.symbol || a.asset_type})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={txForm.transaction_type} onValueChange={v => setTxForm({...txForm, transaction_type: v})}>
-                    <SelectTrigger data-testid="tx-type-select"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="buy">Achat</SelectItem>
-                      <SelectItem value="sell">Vente</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantité *</Label>
-                  <Input type="number" step="any" value={txForm.quantity}
-                    onChange={e => setTxForm({...txForm, quantity: e.target.value})} required data-testid="tx-quantity-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Prix unitaire *</Label>
-                  <Input type="number" step="0.01" value={txForm.price_per_unit}
-                    onChange={e => setTxForm({...txForm, price_per_unit: e.target.value})} required data-testid="tx-price-input" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Frais</Label>
-                  <Input type="number" step="0.01" value={txForm.fees}
-                    onChange={e => setTxForm({...txForm, fees: e.target.value})} data-testid="tx-fees-input" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input type="date" value={txForm.date}
-                  onChange={e => setTxForm({...txForm, date: e.target.value})} data-testid="tx-date-input" />
-              </div>
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea value={txForm.notes} onChange={e => setTxForm({...txForm, notes: e.target.value})}
-                  placeholder="Notes..." data-testid="tx-notes-input" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setTxDialogOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={saving || !txForm.asset_id} data-testid="tx-submit-btn">
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Enregistrer
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
 
 export default PortfolioPage;
+
+

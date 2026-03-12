@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { collectionsApi, collectionItemsApi, tagsApi, inventoryApi, wishlistApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -460,3 +460,5 @@ const CollectionsPage = () => {
 };
 
 export default CollectionsPage;
+
+

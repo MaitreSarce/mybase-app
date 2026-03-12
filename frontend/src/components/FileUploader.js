@@ -1,97 +1,186 @@
-import { useState, useRef } from 'react';
-import { uploadApi } from '../services/api';
+﻿import { useEffect, useRef, useState } from 'react';
+import { mediaApi } from '../services/api';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { 
-  Upload, 
-  X, 
-  FileImage, 
-  FileText, 
+import { Badge } from './ui/badge';
+import { isImageUrl, isVideoUrl, getVideoEmbedUrl } from '../lib/mediaPreview';
+import {
+  Upload,
+  FileImage,
+  FileText,
   File,
+  FileVideo,
   Loader2,
   Download,
-  Trash2
+  Trash2,
+  Link2,
+  Eye,
+  EyeOff,
+  Plus,
 } from 'lucide-react';
 
-const FileUploader = ({ itemType, itemId, attachments = [], onUpdate }) => {
+const FileUploader = ({ itemType, itemId, onUpdate }) => {
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [savingLink, setSavingLink] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [mediaItems, setMediaItems] = useState([]);
   const fileInputRef = useRef(null);
 
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+  const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
 
-    setUploading(true);
-    
-    for (const file of files) {
-      try {
-        await uploadApi.upload(itemType, itemId, file);
-        toast.success(`"${file.name}" uploadé`);
-      } catch (error) {
-        toast.error(`Erreur avec "${file.name}"`);
-      }
-    }
-    
-    setUploading(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    if (onUpdate) onUpdate();
+  const toMediaUrl = (media) => {
+    if (media.kind === 'link') return media.url;
+    if (!media.access_url) return null;
+    return `${baseUrl}${media.access_url}`;
   };
 
-  const handleDelete = async (attachment) => {
-    if (!window.confirm(`Supprimer "${attachment.original_name}" ?`)) return;
-    
-    setDeleting(attachment.id);
+  const isImageMedia = (media, resolvedUrl = '') => {
+    const mime = String(media?.mime_type || '');
+    if (mime.startsWith('image/')) return true;
+    return isImageUrl(resolvedUrl || media?.url);
+  };
+
+  const isVideoMedia = (media, resolvedUrl = '') => {
+    const mime = String(media?.mime_type || '');
+    if (mime.startsWith('video/')) return true;
+    const target = resolvedUrl || media?.url;
+    return isVideoUrl(target) || Boolean(getVideoEmbedUrl(target));
+  };
+
+  const formatFileSize = (bytes) => {
+    const value = Number(bytes || 0);
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const fetchMedia = async () => {
+    if (!itemId) {
+      setMediaItems([]);
+      return;
+    }
+    setLoading(true);
     try {
-      await uploadApi.delete(itemType, itemId, attachment.id);
-      toast.success('Fichier supprimé');
+      const res = await mediaApi.list({ item_type: itemType, item_id: itemId });
+      setMediaItems(res.data || []);
+    } catch {
+      toast.error('Erreur chargement medias');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMedia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemType, itemId]);
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !itemId) return;
+
+    setUploading(true);
+    try {
+      for (const file of files) {
+        await mediaApi.upload({
+          file,
+          itemType,
+          itemId,
+          isFloating: false,
+          previewOnCard: true,
+          title: file.name,
+        });
+      }
+      toast.success('Media ajoute');
+      await fetchMedia();
       if (onUpdate) onUpdate();
-    } catch (error) {
-      toast.error('Erreur lors de la suppression');
+    } catch {
+      toast.error('Erreur upload media');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCreateLink = async () => {
+    if (!linkUrl.trim()) return;
+    if (!itemId) {
+      toast.error('Sauvegardez d abord l item');
+      return;
+    }
+
+    setSavingLink(true);
+    try {
+      await mediaApi.createLink({
+        url: linkUrl.trim(),
+        title: linkTitle.trim() || undefined,
+        item_type: itemType,
+        item_id: itemId,
+        is_floating: false,
+        preview_on_card: true,
+      });
+      setLinkUrl('');
+      setLinkTitle('');
+      toast.success('Lien ajoute');
+      await fetchMedia();
+      if (onUpdate) onUpdate();
+    } catch {
+      toast.error('Erreur ajout lien');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleTogglePreview = async (media) => {
+    try {
+      await mediaApi.update(media.id, { preview_on_card: !media.preview_on_card });
+      await fetchMedia();
+      if (onUpdate) onUpdate();
+    } catch {
+      toast.error('Erreur mise a jour preview');
+    }
+  };
+
+  const handleDelete = async (media) => {
+    if (!window.confirm(`Supprimer "${media.title || media.original_name || media.url}" ?`)) return;
+    setDeleting(media.id);
+    try {
+      await mediaApi.delete(media.id);
+      await fetchMedia();
+      if (onUpdate) onUpdate();
+      toast.success('Media supprime');
+    } catch {
+      toast.error('Erreur suppression media');
     } finally {
       setDeleting(null);
     }
   };
 
-  const getFileIcon = (mimeType) => {
-    if (mimeType?.startsWith('image/')) return FileImage;
-    if (mimeType?.includes('pdf') || mimeType?.includes('document')) return FileText;
+  const getFileIcon = (media, resolvedUrl = '') => {
+    if (isImageMedia(media, resolvedUrl)) return FileImage;
+    if (isVideoMedia(media, resolvedUrl)) return FileVideo;
+    if (String(media?.mime_type || '').includes('pdf') || String(media?.mime_type || '').includes('document')) return FileText;
     return File;
   };
 
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const getFileUrl = (filename) => {
-    return `${process.env.REACT_APP_BACKEND_URL}/uploads/${filename}`;
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 rounded-lg border border-border/60 p-3 bg-muted/10 overflow-hidden w-full max-w-full min-w-0">
+      <div className="flex items-center justify-between gap-2 w-full min-w-0">
         <Label className="text-sm font-medium flex items-center gap-2">
           <Upload className="h-4 w-4" />
-          Fichiers ({attachments.length})
+          Medias
         </Label>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading || !itemId}
-          data-testid="upload-file-btn"
-        >
-          {uploading ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4 mr-1" />
-          )}
-          Ajouter
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading || !itemId}>
+          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+          Ajouter fichier
         </Button>
         <input
           ref={fileInputRef}
@@ -99,69 +188,72 @@ const FileUploader = ({ itemType, itemId, attachments = [], onUpdate }) => {
           multiple
           className="hidden"
           onChange={handleFileSelect}
-          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.csv"
         />
       </div>
 
-      {attachments.length > 0 ? (
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2 w-full min-w-0">
+        <Input className="md:col-span-7" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+        <Input className="md:col-span-4" placeholder="Titre (optionnel)" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
+        <Button type="button" className="md:col-span-1" variant="secondary" onClick={handleCreateLink} disabled={savingLink || !linkUrl.trim()}>
+          {savingLink ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Chargement...</div>
+      ) : mediaItems.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aucun media.</p>
+      ) : (
         <div className="space-y-2">
-          {attachments.map((attachment) => {
-            const Icon = getFileIcon(attachment.mime_type);
-            const isImage = attachment.mime_type?.startsWith('image/');
-            
+          {mediaItems.map((media) => {
+            const url = toMediaUrl(media);
+            const imagePreview = url && isImageMedia(media, url);
+            const videoPreview = url && isVideoMedia(media, url);
+            const embedUrl = media.kind === 'link' ? getVideoEmbedUrl(url) : null;
+            const Icon = getFileIcon(media, url);
             return (
-              <div
-                key={attachment.id}
-                className="flex items-center gap-3 p-2 rounded-md bg-secondary/30 group"
-              >
-                {isImage ? (
-                  <img
-                    src={getFileUrl(attachment.filename)}
-                    alt={attachment.original_name}
-                    className="h-10 w-10 rounded object-cover"
-                  />
+              <div key={media.id} className="w-full min-w-0 overflow-hidden grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 p-2 rounded-md bg-secondary/20 border border-border/40">
+                {imagePreview ? (
+                  <img src={url} alt={media.title || media.original_name || 'media'} className="h-12 w-12 rounded object-cover" />
+                ) : videoPreview ? (
+                  embedUrl ? (
+                    <iframe
+                      src={embedUrl}
+                      title={media.title || media.original_name || 'video'}
+                      className="h-12 w-12 rounded border border-border/40"
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                    />
+                  ) : (
+                    <video src={url} className="h-12 w-12 rounded object-cover" muted preload="metadata" />
+                  )
                 ) : (
-                  <div className="h-10 w-10 rounded bg-secondary flex items-center justify-center">
-                    <Icon className="h-5 w-5 text-muted-foreground" />
-                  </div>
+                  <div className="h-12 w-12 rounded bg-secondary flex items-center justify-center"><Icon className="h-5 w-5 text-muted-foreground" /></div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{attachment.original_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatFileSize(attachment.size)}
-                  </p>
+                  <p className="text-sm font-medium truncate break-all">{media.title || media.original_name || media.url}</p>
+                  <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+                    {media.kind === 'file' ? <span>{formatFileSize(media.size)}</span> : <span>Lien externe</span>}
+                    {media.preview_on_card ? <Badge variant="default">Preview ON</Badge> : <Badge variant="outline">Preview OFF</Badge>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => window.open(getFileUrl(attachment.filename), '_blank')}
-                  >
-                    <Download className="h-4 w-4" />
+                <div className="flex flex-wrap items-center gap-1 md:justify-end">
+                  {url && (
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(url, '_blank')}>
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleTogglePreview(media)}>
+                    {media.preview_on_card ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive"
-                    onClick={() => handleDelete(attachment)}
-                    disabled={deleting === attachment.id}
-                  >
-                    {deleting === attachment.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(media)} disabled={deleting === media.id}>
+                    {deleting === media.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
             );
           })}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          {itemId ? 'Aucun fichier attaché' : 'Sauvegardez d\'abord pour ajouter des fichiers'}
-        </p>
       )}
     </div>
   );

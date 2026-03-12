@@ -1,6 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Query, BackgroundTasks
+﻿from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,6 +18,11 @@ import shutil
 import aiofiles
 import httpx
 import asyncio
+import json
+import zipfile
+import tempfile
+import re
+from urllib.parse import urlparse
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -31,9 +37,12 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'mybase-secret-key-change-in-productio
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
-# File upload directory
-UPLOAD_DIR = ROOT_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+# File upload directory (isolated media folder under STORAGE_ROOT)
+STORAGE_ROOT = Path(os.environ.get("STORAGE_ROOT", str(ROOT_DIR)))
+STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+MEDIA_DIR_NAME = os.environ.get("MEDIA_DIR_NAME", "mybase_media")
+UPLOAD_DIR = STORAGE_ROOT / MEDIA_DIR_NAME
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Create the main app
 app = FastAPI(title="MyBase - Personal Life OS")
@@ -59,6 +68,11 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class UserAccountUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -251,6 +265,7 @@ class TaskResponse(BaseModel):
     completed: bool = False
     tags: List[str] = []
     links: List[Dict[str, Any]] = []
+    attachments: List[Dict[str, Any]] = []
     created_at: str
     updated_at: str
 
@@ -285,6 +300,7 @@ class ProjectResponse(BaseModel):
     status: str = "active"
     tags: List[str] = []
     links: List[Dict[str, Any]] = []
+    attachments: List[Dict[str, Any]] = []
     task_count: int = 0
     completed_tasks: int = 0
     created_at: str
@@ -402,10 +418,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
         if not user:
-            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+            raise HTTPException(status_code=401, detail="Utilisateur non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
         return user
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expiré")
+        raise HTTPException(status_code=401, detail="Token expirÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalide")
 
@@ -415,7 +431,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def register(user_data: UserCreate):
     existing = await db.users.find_one({"email": user_data.email})
     if existing:
-        raise HTTPException(status_code=400, detail="Cet email est déjà utilisé")
+        raise HTTPException(status_code=400, detail="Cet email est dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©jÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â  utilisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -453,6 +469,50 @@ async def login(credentials: UserLogin):
 async def get_me(user: dict = Depends(get_current_user)):
     return UserResponse(**user)
 
+@api_router.put("/auth/account", response_model=UserResponse)
+async def update_account(data: UserAccountUpdate, user: dict = Depends(get_current_user)):
+    update_data: Dict[str, Any] = {}
+
+    wants_email_change = data.email is not None and str(data.email).strip() and str(data.email).strip().lower() != str(user.get("email", "")).strip().lower()
+    wants_password_change = data.new_password is not None and str(data.new_password).strip() != ""
+
+    if wants_email_change or wants_password_change:
+        if not data.current_password:
+            raise HTTPException(status_code=400, detail="Mot de passe actuel requis")
+
+        full_user = await db.users.find_one({"id": user["id"]})
+        if not full_user or not verify_password(data.current_password, full_user.get("password", "")):
+            raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+
+    if wants_email_change:
+        new_email = str(data.email).strip().lower()
+        existing = await db.users.find_one({"email": new_email, "id": {"$ne": user["id"]}})
+        if existing:
+            raise HTTPException(status_code=400, detail="Cet email est deja utilise")
+        update_data["email"] = new_email
+
+    if wants_password_change:
+        new_password = str(data.new_password)
+        if len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit contenir au moins 6 caracteres")
+        update_data["password"] = hash_password(new_password)
+
+    if not update_data:
+        current_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        if not current_user:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+        return UserResponse(**current_user)
+
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"id": user["id"]}, {"$set": update_data})
+
+    refreshed = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    if not refreshed:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouve")
+
+    return UserResponse(**refreshed)
+
+
 # ==================== COLLECTIONS ROUTES ====================
 
 @api_router.post("/collections", response_model=CollectionResponse)
@@ -482,7 +542,7 @@ async def get_collections(user: dict = Depends(get_current_user)):
 async def get_collection(collection_id: str, user: dict = Depends(get_current_user)):
     collection = await db.collections.find_one({"id": collection_id, "user_id": user["id"]}, {"_id": 0})
     if not collection:
-        raise HTTPException(status_code=404, detail="Collection non trouvée")
+        raise HTTPException(status_code=404, detail="Collection non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
     return CollectionResponse(**collection)
 
 @api_router.put("/collections/{collection_id}", response_model=CollectionResponse)
@@ -496,7 +556,7 @@ async def update_collection(collection_id: str, data: CollectionUpdate, user: di
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Collection non trouvée")
+        raise HTTPException(status_code=404, detail="Collection non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
     result.pop("_id", None)
     return CollectionResponse(**result)
 
@@ -504,8 +564,8 @@ async def update_collection(collection_id: str, data: CollectionUpdate, user: di
 async def delete_collection(collection_id: str, user: dict = Depends(get_current_user)):
     result = await db.collections.delete_one({"id": collection_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Collection non trouvée")
-    return {"message": "Collection supprimée"}
+        raise HTTPException(status_code=404, detail="Collection non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
+    return {"message": "Collection supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e"}
 
 # ==================== INVENTORY ROUTES ====================
 
@@ -571,7 +631,7 @@ async def get_inventory_items(
 async def get_inventory_item(item_id: str, user: dict = Depends(get_current_user)):
     item = await db.inventory.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0})
     if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return InventoryItemResponse(**item)
 
 @api_router.put("/inventory/{item_id}", response_model=InventoryItemResponse)
@@ -593,7 +653,7 @@ async def update_inventory_item(item_id: str, data: InventoryItemUpdate, user: d
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return InventoryItemResponse(**result)
 
@@ -601,7 +661,7 @@ async def update_inventory_item(item_id: str, data: InventoryItemUpdate, user: d
 async def delete_inventory_item(item_id: str, user: dict = Depends(get_current_user)):
     item = await db.inventory.find_one({"id": item_id, "user_id": user["id"]})
     if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     
     await db.inventory.delete_one({"id": item_id})
     
@@ -612,7 +672,7 @@ async def delete_inventory_item(item_id: str, user: dict = Depends(get_current_u
             {"$inc": {"item_count": -1}}
         )
     
-    return {"message": "Item supprimé"}
+    return {"message": "Item supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 # ==================== WISHLIST ROUTES ====================
 
@@ -664,7 +724,7 @@ async def get_wishlist_items(
 async def get_wishlist_item(item_id: str, user: dict = Depends(get_current_user)):
     item = await db.wishlist.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0})
     if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return WishlistItemResponse(**item)
 
 @api_router.put("/wishlist/{item_id}", response_model=WishlistItemResponse)
@@ -686,7 +746,7 @@ async def update_wishlist_item(item_id: str, data: WishlistItemUpdate, user: dic
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return WishlistItemResponse(**result)
 
@@ -694,8 +754,8 @@ async def update_wishlist_item(item_id: str, data: WishlistItemUpdate, user: dic
 async def delete_wishlist_item(item_id: str, user: dict = Depends(get_current_user)):
     result = await db.wishlist.delete_one({"id": item_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
-    return {"message": "Item supprimé"}
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
+    return {"message": "Item supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 # ==================== PROJECTS/TASKS ROUTES ====================
 
@@ -715,6 +775,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
         "status": "active",
         "tags": data.tags,
         "links": [l.model_dump() for l in data.links],
+        "attachments": [],
         "task_count": 0,
         "completed_tasks": 0,
         "created_at": now,
@@ -738,7 +799,7 @@ async def get_projects(user: dict = Depends(get_current_user), status: Optional[
 async def get_project(project_id: str, user: dict = Depends(get_current_user)):
     project = await db.projects.find_one({"id": project_id, "user_id": user["id"]}, {"_id": 0})
     if not project:
-        raise HTTPException(status_code=404, detail="Projet non trouvé")
+        raise HTTPException(status_code=404, detail="Projet non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return ProjectResponse(**project)
 
 @api_router.put("/projects/{project_id}", response_model=ProjectResponse)
@@ -758,7 +819,7 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Projet non trouvé")
+        raise HTTPException(status_code=404, detail="Projet non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return ProjectResponse(**result)
 
@@ -766,10 +827,10 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
 async def delete_project(project_id: str, user: dict = Depends(get_current_user)):
     result = await db.projects.delete_one({"id": project_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Projet non trouvé")
+        raise HTTPException(status_code=404, detail="Projet non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     # Also delete associated tasks
     await db.tasks.delete_many({"project_id": project_id, "user_id": user["id"]})
-    return {"message": "Projet supprimé"}
+    return {"message": "Projet supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 @api_router.post("/tasks", response_model=TaskResponse)
 async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
@@ -787,6 +848,7 @@ async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
         "completed": False,
         "tags": data.tags,
         "links": [l.model_dump() for l in data.links],
+        "attachments": [],
         "created_at": now,
         "updated_at": now
     }
@@ -822,14 +884,14 @@ async def get_tasks(
 async def get_task(task_id: str, user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]}, {"_id": 0})
     if not task:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+        raise HTTPException(status_code=404, detail="TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢che non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
     return TaskResponse(**task)
 
 @api_router.put("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_current_user)):
     old_task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]})
     if not old_task:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+        raise HTTPException(status_code=404, detail="TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢che non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
     
     update_data = {}
     for k, v in data.model_dump().items():
@@ -865,7 +927,7 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
 async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]})
     if not task:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+        raise HTTPException(status_code=404, detail="TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢che non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
     
     await db.tasks.delete_one({"id": task_id})
     
@@ -878,7 +940,7 @@ async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
             {"$inc": inc_data}
         )
     
-    return {"message": "Tâche supprimée"}
+    return {"message": "TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢che supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e"}
 
 # ==================== CONTENT ROUTES ====================
 
@@ -933,7 +995,7 @@ async def get_content_items(
 async def get_content_item(content_id: str, user: dict = Depends(get_current_user)):
     item = await db.content.find_one({"id": content_id, "user_id": user["id"]}, {"_id": 0})
     if not item:
-        raise HTTPException(status_code=404, detail="Contenu non trouvé")
+        raise HTTPException(status_code=404, detail="Contenu non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return ContentResponse(**item)
 
 @api_router.put("/content/{content_id}", response_model=ContentResponse)
@@ -955,7 +1017,7 @@ async def update_content(content_id: str, data: ContentUpdate, user: dict = Depe
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Contenu non trouvé")
+        raise HTTPException(status_code=404, detail="Contenu non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return ContentResponse(**result)
 
@@ -963,8 +1025,8 @@ async def update_content(content_id: str, data: ContentUpdate, user: dict = Depe
 async def delete_content(content_id: str, user: dict = Depends(get_current_user)):
     result = await db.content.delete_one({"id": content_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Contenu non trouvé")
-    return {"message": "Contenu supprimé"}
+        raise HTTPException(status_code=404, detail="Contenu non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
+    return {"message": "Contenu supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 # ==================== PORTFOLIO ROUTES ====================
 
@@ -1039,7 +1101,7 @@ class TransactionResponse(BaseModel):
 async def create_transaction(data: TransactionCreate, user: dict = Depends(get_current_user)):
     asset = await db.portfolio.find_one({"id": data.asset_id, "user_id": user["id"]}, {"_id": 0})
     if not asset:
-        raise HTTPException(status_code=404, detail="Actif non trouvé")
+        raise HTTPException(status_code=404, detail="Actif non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     tx_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     total = data.quantity * data.price_per_unit
@@ -1070,8 +1132,8 @@ async def get_transactions(user: dict = Depends(get_current_user), asset_id: Opt
 async def delete_transaction(tx_id: str, user: dict = Depends(get_current_user)):
     result = await db.portfolio_transactions.delete_one({"id": tx_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Transaction non trouvée")
-    return {"message": "Transaction supprimée"}
+        raise HTTPException(status_code=404, detail="Transaction non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
+    return {"message": "Transaction supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e"}
 
 @api_router.post("/portfolio/snapshots")
 async def create_portfolio_snapshot(data: dict = None, user: dict = Depends(get_current_user)):
@@ -1093,7 +1155,7 @@ async def create_portfolio_snapshot(data: dict = None, user: dict = Depends(get_
     await db.portfolio_snapshots.update_one(
         {"user_id": user["id"], "date": doc["date"]}, {"$set": doc}, upsert=True
     )
-    return {"message": "Snapshot créé", "total_value": total_value}
+    return {"message": "Snapshot crÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©", "total_value": total_value}
 
 @api_router.get("/portfolio/snapshots")
 async def get_portfolio_snapshots(user: dict = Depends(get_current_user), months: int = 12):
@@ -1114,7 +1176,7 @@ async def refresh_prices_get(user: dict = Depends(get_current_user)):
 async def get_portfolio_asset(asset_id: str, user: dict = Depends(get_current_user)):
     asset = await db.portfolio.find_one({"id": asset_id, "user_id": user["id"]}, {"_id": 0})
     if not asset:
-        raise HTTPException(status_code=404, detail="Actif non trouvé")
+        raise HTTPException(status_code=404, detail="Actif non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return PortfolioAssetResponse(**asset)
 
 @api_router.put("/portfolio/{asset_id}", response_model=PortfolioAssetResponse)
@@ -1136,7 +1198,7 @@ async def update_portfolio_asset(asset_id: str, data: PortfolioAssetUpdate, user
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Actif non trouvé")
+        raise HTTPException(status_code=404, detail="Actif non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return PortfolioAssetResponse(**result)
 
@@ -1144,63 +1206,884 @@ async def update_portfolio_asset(asset_id: str, data: PortfolioAssetUpdate, user
 async def delete_portfolio_asset(asset_id: str, user: dict = Depends(get_current_user)):
     result = await db.portfolio.delete_one({"id": asset_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Actif non trouvé")
-    return {"message": "Actif supprimé"}
+        raise HTTPException(status_code=404, detail="Actif non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
+    return {"message": "Actif supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
-# ==================== FILE UPLOAD ROUTES ====================
+# ==================== PORTFOLIO V2 ROUTES ====================
+
+class PortfolioV2StatusCreate(BaseModel):
+    name: str
+    status: str = "active"  # active, inactive
+    updated_date: Optional[str] = None
+    account_type: str  # crypto, etf_action, immo, other
+    invested: float = 0
+    sold: float = 0
+    real: float = 0
+
+class PortfolioV2StatusUpdate(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+    updated_date: Optional[str] = None
+    account_type: Optional[str] = None
+    invested: Optional[float] = None
+    sold: Optional[float] = None
+    real: Optional[float] = None
+
+class PortfolioV2DepositCreate(BaseModel):
+    account_name: str
+    date: str
+    invested: float = 0
+    sold: float = 0
+    total: Optional[float] = None
+    comment: Optional[str] = None
+
+class PortfolioV2DepositUpdate(BaseModel):
+    account_name: Optional[str] = None
+    date: Optional[str] = None
+    invested: Optional[float] = None
+    sold: Optional[float] = None
+    total: Optional[float] = None
+    comment: Optional[str] = None
+
+class PortfolioV2SaleCreate(BaseModel):
+    date: str
+    amount: float
+    source: str
+    received_on: str
+    comment: Optional[str] = None
+    sale_type: str
+
+class PortfolioV2SaleUpdate(BaseModel):
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    source: Optional[str] = None
+    received_on: Optional[str] = None
+    comment: Optional[str] = None
+    sale_type: Optional[str] = None
+
+class PortfolioV2PhysicalAssetCreate(BaseModel):
+    purchase_date: Optional[str] = None
+    category: Optional[str] = None
+    brand: Optional[str] = None
+    name: str
+    purchase_shop: Optional[str] = None
+    purchase_price: float = 0
+    valuation: float = 0
+    sale_price: float = 0
+    sale_date: Optional[str] = None
+    sale_shop: Optional[str] = None
+
+class PortfolioV2PhysicalAssetUpdate(BaseModel):
+    purchase_date: Optional[str] = None
+    category: Optional[str] = None
+    brand: Optional[str] = None
+    name: Optional[str] = None
+    purchase_shop: Optional[str] = None
+    purchase_price: Optional[float] = None
+    valuation: Optional[float] = None
+    sale_price: Optional[float] = None
+    sale_date: Optional[str] = None
+    sale_shop: Optional[str] = None
+
+class PortfolioV2SnapshotCreate(BaseModel):
+    date: str
+    total_invested: Optional[float] = None
+    total_sold: Optional[float] = None
+    total_real: Optional[float] = None
+    total_gain: Optional[float] = None
+    total_perf_pct: Optional[float] = None
+    by_type: Optional[Dict[str, Dict[str, float]]] = None
+
+class PortfolioV2SnapshotUpdate(BaseModel):
+    date: Optional[str] = None
+    total_invested: Optional[float] = None
+    total_sold: Optional[float] = None
+    total_real: Optional[float] = None
+    total_gain: Optional[float] = None
+    total_perf_pct: Optional[float] = None
+    by_type: Optional[Dict[str, Dict[str, float]]] = None
+
+
+def _to_float(value: Any) -> float:
+    try:
+        if value is None:
+            return 0.0
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _status_with_metrics(item: Dict[str, Any]) -> Dict[str, Any]:
+    invested = _to_float(item.get("invested"))
+    sold = _to_float(item.get("sold"))
+    real = _to_float(item.get("real"))
+    gain = real - invested + sold
+    perf_pct = (gain / invested * 100) if invested != 0 and real != 0 else 0.0
+    return {
+        **item,
+        "invested": invested,
+        "sold": sold,
+        "real": real,
+        "gain": gain,
+        "perf_pct": perf_pct,
+    }
+
+
+def _build_portfolio_v2_recap(status_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_type: Dict[str, Dict[str, float]] = {}
+
+    total_invested = 0.0
+    total_sold = 0.0
+    total_real = 0.0
+
+    for item in status_items:
+        account_type = item.get("account_type") or "other"
+        invested = _to_float(item.get("invested"))
+        sold = _to_float(item.get("sold"))
+        real = _to_float(item.get("real"))
+
+        if account_type not in by_type:
+            by_type[account_type] = {"invested": 0.0, "sold": 0.0, "real": 0.0}
+
+        by_type[account_type]["invested"] += invested
+        by_type[account_type]["sold"] += sold
+        by_type[account_type]["real"] += real
+
+        total_invested += invested
+        total_sold += sold
+        total_real += real
+
+    rows = []
+    for account_type, values in by_type.items():
+        gain = values["real"] - values["invested"] + values["sold"]
+        perf_pct = (gain / values["invested"] * 100) if values["invested"] != 0 and values["real"] != 0 else 0.0
+        rows.append({
+            "type": account_type,
+            "invested": values["invested"],
+            "sold": values["sold"],
+            "real": values["real"],
+            "gain": gain,
+            "perf_pct": perf_pct,
+        })
+
+    rows = sorted(rows, key=lambda x: x["type"])
+
+    total_gain = total_real - total_invested + total_sold
+    total_perf_pct = (total_gain / total_invested * 100) if total_invested != 0 and total_real != 0 else 0.0
+
+    totals = {
+        "type": "TOTAL",
+        "invested": total_invested,
+        "sold": total_sold,
+        "real": total_real,
+        "gain": total_gain,
+        "perf_pct": total_perf_pct,
+    }
+
+    denom_invested = total_invested if total_invested != 0 else 0.0
+    denom_sold = total_sold if total_sold != 0 else 0.0
+    denom_real = total_real if total_real != 0 else 0.0
+    denom_gain = total_gain if total_gain != 0 else 0.0
+
+    proportion_rows = []
+    for row in rows:
+        proportion_rows.append({
+            "type": row["type"],
+            "invested": (row["invested"] / denom_invested * 100) if denom_invested else 0.0,
+            "sold": (row["sold"] / denom_sold * 100) if denom_sold else 0.0,
+            "real": (row["real"] / denom_real * 100) if denom_real else 0.0,
+            "gain": (row["gain"] / denom_gain * 100) if denom_gain else 0.0,
+        })
+
+    proportion_rows.append({
+        "type": "TOTAL",
+        "invested": 100.0 if denom_invested else 0.0,
+        "sold": 100.0 if denom_sold else 0.0,
+        "real": 100.0 if denom_real else 0.0,
+        "gain": 100.0 if denom_gain else 0.0,
+    })
+
+    return {
+        "rows": rows,
+        "totals": totals,
+        "proportions": proportion_rows,
+    }
+
+
+@api_router.get("/portfolio-v2/status")
+async def get_portfolio_v2_status(user: dict = Depends(get_current_user)):
+    items = await db.portfolio_v2_status.find({"user_id": user["id"]}, {"_id": 0}).sort("name", 1).to_list(5000)
+    return [_status_with_metrics(item) for item in items]
+
+
+@api_router.post("/portfolio-v2/status")
+async def create_portfolio_v2_status(data: PortfolioV2StatusCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "name": data.name,
+        "status": data.status,
+        "updated_date": data.updated_date,
+        "account_type": data.account_type,
+        "invested": _to_float(data.invested),
+        "sold": _to_float(data.sold),
+        "real": _to_float(data.real),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.portfolio_v2_status.insert_one(doc)
+    doc.pop("_id", None)
+    return _status_with_metrics(doc)
+
+
+@api_router.put("/portfolio-v2/status/{status_id}")
+async def update_portfolio_v2_status(status_id: str, data: PortfolioV2StatusUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    for key in ("invested", "sold", "real"):
+        if key in update_data:
+            update_data[key] = _to_float(update_data[key])
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.portfolio_v2_status.find_one_and_update(
+        {"id": status_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Ligne status non trouvÃƒÆ’Ã‚Â©e")
+    result.pop("_id", None)
+    return _status_with_metrics(result)
+
+
+@api_router.delete("/portfolio-v2/status/{status_id}")
+async def delete_portfolio_v2_status(status_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_v2_status.delete_one({"id": status_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ligne status non trouvÃƒÆ’Ã‚Â©e")
+    return {"message": "Ligne status supprimÃƒÆ’Ã‚Â©e"}
+
+
+@api_router.get("/portfolio-v2/recap")
+async def get_portfolio_v2_recap(user: dict = Depends(get_current_user)):
+    status_items = await db.portfolio_v2_status.find({"user_id": user["id"]}, {"_id": 0}).to_list(5000)
+    return _build_portfolio_v2_recap(status_items)
+
+
+@api_router.get("/portfolio-v2/deposits")
+async def get_portfolio_v2_deposits(user: dict = Depends(get_current_user), account_name: Optional[str] = None):
+    query = {"user_id": user["id"]}
+    if account_name:
+        query["account_name"] = account_name
+    rows = await db.portfolio_v2_deposits.find(query, {"_id": 0}).sort("date", -1).to_list(10000)
+    return rows
+
+
+@api_router.post("/portfolio-v2/deposits")
+async def create_portfolio_v2_deposit(data: PortfolioV2DepositCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    invested = _to_float(data.invested)
+    sold = _to_float(data.sold)
+    total = _to_float(data.total) if data.total is not None else invested - sold
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "account_name": data.account_name,
+        "date": data.date,
+        "invested": invested,
+        "sold": sold,
+        "total": total,
+        "comment": data.comment,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.portfolio_v2_deposits.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/portfolio-v2/deposits/{deposit_id}")
+async def update_portfolio_v2_deposit(deposit_id: str, data: PortfolioV2DepositUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    for key in ("invested", "sold", "total"):
+        if key in update_data:
+            update_data[key] = _to_float(update_data[key])
+    if "total" not in update_data and ("invested" in update_data or "sold" in update_data):
+        existing = await db.portfolio_v2_deposits.find_one({"id": deposit_id, "user_id": user["id"]})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Ligne dÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t non trouvÃƒÆ’Ã‚Â©e")
+        invested = update_data.get("invested", _to_float(existing.get("invested")))
+        sold = update_data.get("sold", _to_float(existing.get("sold")))
+        update_data["total"] = invested - sold
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.portfolio_v2_deposits.find_one_and_update(
+        {"id": deposit_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Ligne dÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t non trouvÃƒÆ’Ã‚Â©e")
+    result.pop("_id", None)
+    return result
+
+
+@api_router.delete("/portfolio-v2/deposits/{deposit_id}")
+async def delete_portfolio_v2_deposit(deposit_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_v2_deposits.delete_one({"id": deposit_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ligne dÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t non trouvÃƒÆ’Ã‚Â©e")
+    return {"message": "Ligne dÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t supprimÃƒÆ’Ã‚Â©e"}
+
+
+@api_router.get("/portfolio-v2/sales")
+async def get_portfolio_v2_sales(user: dict = Depends(get_current_user)):
+    rows = await db.portfolio_v2_sales.find({"user_id": user["id"]}, {"_id": 0}).sort("date", -1).to_list(10000)
+    return rows
+
+
+@api_router.post("/portfolio-v2/sales")
+async def create_portfolio_v2_sale(data: PortfolioV2SaleCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "date": data.date,
+        "amount": _to_float(data.amount),
+        "source": data.source,
+        "received_on": data.received_on,
+        "comment": data.comment,
+        "sale_type": data.sale_type,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.portfolio_v2_sales.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/portfolio-v2/sales/{sale_id}")
+async def update_portfolio_v2_sale(sale_id: str, data: PortfolioV2SaleUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "amount" in update_data:
+        update_data["amount"] = _to_float(update_data["amount"])
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.portfolio_v2_sales.find_one_and_update(
+        {"id": sale_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Ligne vente non trouvÃƒÆ’Ã‚Â©e")
+    result.pop("_id", None)
+    return result
+
+
+@api_router.delete("/portfolio-v2/sales/{sale_id}")
+async def delete_portfolio_v2_sale(sale_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_v2_sales.delete_one({"id": sale_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ligne vente non trouvÃƒÆ’Ã‚Â©e")
+    return {"message": "Ligne vente supprimÃƒÆ’Ã‚Â©e"}
+
+
+def _with_physical_margin(item: Dict[str, Any]) -> Dict[str, Any]:
+    purchase_price = _to_float(item.get("purchase_price"))
+    valuation = _to_float(item.get("valuation"))
+    sale_price = _to_float(item.get("sale_price"))
+
+    margin = (purchase_price - valuation) if sale_price == 0 else (purchase_price - sale_price)
+
+    return {
+        **item,
+        "purchase_price": purchase_price,
+        "valuation": valuation,
+        "sale_price": sale_price,
+        "margin": margin,
+    }
+
+
+@api_router.get("/portfolio-v2/physical-assets")
+async def get_portfolio_v2_physical_assets(user: dict = Depends(get_current_user)):
+    rows = await db.portfolio_v2_physical_assets.find({"user_id": user["id"]}, {"_id": 0}).sort("purchase_date", -1).to_list(10000)
+    return [_with_physical_margin(row) for row in rows]
+
+
+@api_router.post("/portfolio-v2/physical-assets")
+async def create_portfolio_v2_physical_asset(data: PortfolioV2PhysicalAssetCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "purchase_date": data.purchase_date,
+        "category": data.category,
+        "brand": data.brand,
+        "name": data.name,
+        "purchase_shop": data.purchase_shop,
+        "purchase_price": _to_float(data.purchase_price),
+        "valuation": _to_float(data.valuation),
+        "sale_price": _to_float(data.sale_price),
+        "sale_date": data.sale_date,
+        "sale_shop": data.sale_shop,
+        "links": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.portfolio_v2_physical_assets.insert_one(doc)
+    doc.pop("_id", None)
+    return _with_physical_margin(doc)
+
+
+@api_router.put("/portfolio-v2/physical-assets/{asset_id}")
+async def update_portfolio_v2_physical_asset(asset_id: str, data: PortfolioV2PhysicalAssetUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    for key in ("purchase_price", "valuation", "sale_price"):
+        if key in update_data:
+            update_data[key] = _to_float(update_data[key])
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.portfolio_v2_physical_assets.find_one_and_update(
+        {"id": asset_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Actif physique non trouvÃƒÆ’Ã‚Â©")
+    result.pop("_id", None)
+    return _with_physical_margin(result)
+
+
+@api_router.delete("/portfolio-v2/physical-assets/{asset_id}")
+async def delete_portfolio_v2_physical_asset(asset_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_v2_physical_assets.delete_one({"id": asset_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Actif physique non trouvÃƒÆ’Ã‚Â©")
+    return {"message": "Actif physique supprimÃƒÆ’Ã‚Â©"}
+
+
+@api_router.get("/portfolio-v2/snapshots")
+async def get_portfolio_v2_snapshots(user: dict = Depends(get_current_user)):
+    rows = await db.portfolio_v2_snapshots.find({"user_id": user["id"]}, {"_id": 0}).sort("date", 1).to_list(10000)
+    return rows
+
+
+@api_router.post("/portfolio-v2/snapshots")
+async def create_portfolio_v2_snapshot(data: PortfolioV2SnapshotCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+
+    status_items = await db.portfolio_v2_status.find({"user_id": user["id"]}, {"_id": 0}).to_list(10000)
+    recap = _build_portfolio_v2_recap(status_items)
+
+    inferred_by_type = {
+        row["type"]: {
+            "invested": row["invested"],
+            "sold": row["sold"],
+            "real": row["real"],
+            "gain": row["gain"],
+            "perf_pct": row["perf_pct"],
+        }
+        for row in recap["rows"]
+    }
+
+    default_total_invested = recap["totals"]["invested"]
+    default_total_sold = recap["totals"]["sold"]
+    default_total_real = recap["totals"]["real"]
+    default_total_gain = recap["totals"]["gain"]
+    default_total_perf = recap["totals"]["perf_pct"]
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "date": data.date,
+        "total_invested": _to_float(data.total_invested) if data.total_invested is not None else default_total_invested,
+        "total_sold": _to_float(data.total_sold) if data.total_sold is not None else default_total_sold,
+        "total_real": _to_float(data.total_real) if data.total_real is not None else default_total_real,
+        "total_gain": _to_float(data.total_gain) if data.total_gain is not None else default_total_gain,
+        "total_perf_pct": _to_float(data.total_perf_pct) if data.total_perf_pct is not None else default_total_perf,
+        "by_type": data.by_type if data.by_type is not None else inferred_by_type,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    existing = await db.portfolio_v2_snapshots.find_one({"user_id": user["id"], "date": data.date}, {"_id": 1, "id": 1})
+    if existing:
+        doc["id"] = existing.get("id") or doc["id"]
+        await db.portfolio_v2_snapshots.update_one({"_id": existing["_id"]}, {"$set": doc})
+    else:
+        await db.portfolio_v2_snapshots.insert_one(doc)
+
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/portfolio-v2/snapshots/{snapshot_id}")
+async def update_portfolio_v2_snapshot(snapshot_id: str, data: PortfolioV2SnapshotUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    for key in ("total_invested", "total_sold", "total_real", "total_gain", "total_perf_pct"):
+        if key in update_data:
+            update_data[key] = _to_float(update_data[key])
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.portfolio_v2_snapshots.find_one_and_update(
+        {"id": snapshot_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Snapshot non trouvÃƒÆ’Ã‚Â©")
+    result.pop("_id", None)
+    return result
+
+
+@api_router.delete("/portfolio-v2/snapshots/{snapshot_id}")
+async def delete_portfolio_v2_snapshot(snapshot_id: str, user: dict = Depends(get_current_user)):
+    result = await db.portfolio_v2_snapshots.delete_one({"id": snapshot_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Snapshot non trouvÃƒÆ’Ã‚Â©")
+    return {"message": "Snapshot supprimÃƒÆ’Ã‚Â©"}
+
+# ==================== FILE / MEDIA ROUTES ====================
+
+class MediaLinkCreate(BaseModel):
+    url: str
+    title: Optional[str] = None
+    item_type: Optional[str] = None
+    item_id: Optional[str] = None
+    is_floating: bool = False
+    preview_on_card: bool = False
+
+class MediaUpdate(BaseModel):
+    title: Optional[str] = None
+    preview_on_card: Optional[bool] = None
+    is_floating: Optional[bool] = None
+
+class MediaAttachPayload(BaseModel):
+    item_type: str
+    item_id: str
+
+ITEM_COLLECTIONS = {
+    "inventory": db.inventory,
+    "wishlist": db.wishlist,
+    "content": db.content,
+    "portfolio": db.portfolio,
+    "portfolio_physical": db.portfolio_v2_physical_assets,
+    "project": db.projects,
+    "task": db.tasks,
+}
+
+
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_image_url(url: Optional[str]) -> bool:
+    if not url:
+        return False
+    lowered = url.lower()
+    return any(lowered.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"])
+
+
+def _serialize_media(doc: Dict[str, Any]) -> Dict[str, Any]:
+    media = {k: v for k, v in doc.items() if k != "_id"}
+    if media.get("kind") == "file" and media.get("filename"):
+        media["access_url"] = f"/uploads/{media['filename']}"
+    elif media.get("kind") == "link":
+        media["access_url"] = media.get("url")
+    media["is_previewable_image"] = (
+        str(media.get("mime_type", "")).startswith("image/")
+        or _is_image_url(media.get("url"))
+    )
+    return media
+
+
+async def _ensure_item(item_type: str, item_id: str, user_id: str) -> Dict[str, Any]:
+    col = ITEM_COLLECTIONS.get(item_type)
+    if col is None:
+        raise HTTPException(status_code=400, detail="Type d'item invalide")
+    item = await col.find_one({"id": item_id, "user_id": user_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item non trouve")
+    return item
+
+
+def _build_attachment_from_media(media_doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": media_doc["id"],
+        "media_id": media_doc["id"],
+        "kind": media_doc.get("kind", "file"),
+        "filename": media_doc.get("filename"),
+        "original_name": media_doc.get("original_name") or media_doc.get("title") or media_doc.get("url") or "media",
+        "mime_type": media_doc.get("mime_type") or "application/octet-stream",
+        "size": media_doc.get("size", 0),
+        "url": media_doc.get("url"),
+        "preview_on_card": bool(media_doc.get("preview_on_card", False)),
+        "uploaded_at": media_doc.get("created_at") or datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def _sync_attachment_for_item(media_doc: Dict[str, Any], item_type: str, item_id: str, user_id: str):
+    col = ITEM_COLLECTIONS[item_type]
+    attachment = _build_attachment_from_media(media_doc)
+    await col.update_one(
+        {"id": item_id, "user_id": user_id},
+        {"$pull": {"attachments": {"id": media_doc["id"]}}}
+    )
+    await col.update_one(
+        {"id": item_id, "user_id": user_id},
+        {"$push": {"attachments": attachment}}
+    )
+
+
+async def _attach_media_to_item(media_doc: Dict[str, Any], item_type: str, item_id: str, user_id: str):
+    await _ensure_item(item_type, item_id, user_id)
+    linked_items = media_doc.get("linked_items", [])
+    exists = any(li.get("item_type") == item_type and li.get("item_id") == item_id for li in linked_items)
+    if not exists:
+        linked_items.append({"item_type": item_type, "item_id": item_id})
+        await db.media_items.update_one(
+            {"id": media_doc["id"], "user_id": user_id},
+            {"$set": {"linked_items": linked_items, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        media_doc["linked_items"] = linked_items
+    await _sync_attachment_for_item(media_doc, item_type, item_id, user_id)
+
+
+async def _detach_media_from_item(media_doc: Dict[str, Any], item_type: str, item_id: str, user_id: str):
+    col = ITEM_COLLECTIONS.get(item_type)
+    if col:
+        await col.update_one(
+            {"id": item_id, "user_id": user_id},
+            {"$pull": {"attachments": {"id": media_doc["id"]}}}
+        )
+    linked_items = [
+        li for li in media_doc.get("linked_items", [])
+        if not (li.get("item_type") == item_type and li.get("item_id") == item_id)
+    ]
+    await db.media_items.update_one(
+        {"id": media_doc["id"], "user_id": user_id},
+        {"$set": {"linked_items": linked_items, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+
+async def _create_media_from_upload(
+    user_id: str,
+    file: UploadFile,
+    preview_on_card: bool,
+    title: Optional[str] = None,
+    item_type: Optional[str] = None,
+    item_id: Optional[str] = None,
+    is_floating: bool = False,
+) -> Dict[str, Any]:
+    if item_type and item_id:
+        await _ensure_item(item_type, item_id, user_id)
+
+    media_id = str(uuid.uuid4())
+    file_ext = Path(file.filename or "").suffix
+    filename = f"{media_id}{file_ext}"
+    file_path = UPLOAD_DIR / filename
+
+    raw = await file.read()
+    async with aiofiles.open(file_path, "wb") as out_file:
+        await out_file.write(raw)
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": media_id,
+        "user_id": user_id,
+        "kind": "file",
+        "title": title or file.filename,
+        "filename": filename,
+        "original_name": file.filename,
+        "mime_type": file.content_type or "application/octet-stream",
+        "size": len(raw),
+        "storage_path": str(file_path),
+        "url": None,
+        "preview_on_card": bool(preview_on_card),
+        "is_floating": bool(is_floating or not (item_type and item_id)),
+        "linked_items": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    await db.media_items.insert_one(doc)
+
+    if item_type and item_id:
+        await _attach_media_to_item(doc, item_type, item_id, user_id)
+
+    return doc
+
+
+@api_router.get("/media")
+async def list_media(
+    item_type: Optional[str] = None,
+    item_id: Optional[str] = None,
+    floating_only: bool = False,
+    user: dict = Depends(get_current_user)
+):
+    query: Dict[str, Any] = {"user_id": user["id"]}
+    if item_type and item_id:
+        query["linked_items"] = {"$elemMatch": {"item_type": item_type, "item_id": item_id}}
+    if floating_only:
+        query["is_floating"] = True
+
+    rows = await db.media_items.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return [_serialize_media(r) for r in rows]
+
+
+@api_router.post("/media/upload")
+async def media_upload(
+    file: UploadFile = File(...),
+    item_type: Optional[str] = Form(None),
+    item_id: Optional[str] = Form(None),
+    is_floating: Optional[str] = Form(None),
+    preview_on_card: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    user: dict = Depends(get_current_user)
+):
+    attach_mode = bool(item_type and item_id)
+    media_doc = await _create_media_from_upload(
+        user_id=user["id"],
+        file=file,
+        preview_on_card=_parse_bool(preview_on_card, False),
+        title=title,
+        item_type=item_type if attach_mode else None,
+        item_id=item_id if attach_mode else None,
+        is_floating=_parse_bool(is_floating, not attach_mode),
+    )
+    return _serialize_media(media_doc)
+
+
+@api_router.post("/media/link")
+async def create_media_link(payload: MediaLinkCreate, user: dict = Depends(get_current_user)):
+    if payload.item_type and not payload.item_id:
+        raise HTTPException(status_code=400, detail="item_id requis si item_type est fourni")
+    if payload.item_id and not payload.item_type:
+        raise HTTPException(status_code=400, detail="item_type requis si item_id est fourni")
+
+    if payload.item_type and payload.item_id:
+        await _ensure_item(payload.item_type, payload.item_id, user["id"])
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "kind": "link",
+        "title": payload.title or payload.url,
+        "filename": None,
+        "original_name": payload.title or payload.url,
+        "mime_type": "text/uri-list",
+        "size": 0,
+        "storage_path": None,
+        "url": payload.url,
+        "preview_on_card": bool(payload.preview_on_card),
+        "is_floating": bool(payload.is_floating or not (payload.item_type and payload.item_id)),
+        "linked_items": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.media_items.insert_one(doc)
+
+    if payload.item_type and payload.item_id:
+        await _attach_media_to_item(doc, payload.item_type, payload.item_id, user["id"])
+
+    return _serialize_media(doc)
+
+
+@api_router.put("/media/{media_id}")
+async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends(get_current_user)):
+    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
+    if not media_doc:
+        raise HTTPException(status_code=404, detail="Media non trouve")
+
+    update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.media_items.update_one(
+        {"id": media_id, "user_id": user["id"]},
+        {"$set": update_data}
+    )
+
+    media_doc.update(update_data)
+
+    if "preview_on_card" in update_data:
+        for li in media_doc.get("linked_items", []):
+            item_type = li.get("item_type")
+            item_id = li.get("item_id")
+            if item_type in ITEM_COLLECTIONS and item_id:
+                await _sync_attachment_for_item(media_doc, item_type, item_id, user["id"])
+
+    saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
+    return _serialize_media(saved)
+
+
+@api_router.post("/media/{media_id}/attach")
+async def attach_media(media_id: str, payload: MediaAttachPayload, user: dict = Depends(get_current_user)):
+    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
+    if not media_doc:
+        raise HTTPException(status_code=404, detail="Media non trouve")
+
+    await _attach_media_to_item(media_doc, payload.item_type, payload.item_id, user["id"])
+    return {"message": "Media attache"}
+
+
+@api_router.delete("/media/{media_id}/attach")
+async def detach_media(media_id: str, item_type: str, item_id: str, user: dict = Depends(get_current_user)):
+    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
+    if not media_doc:
+        raise HTTPException(status_code=404, detail="Media non trouve")
+
+    await _detach_media_from_item(media_doc, item_type, item_id, user["id"])
+    return {"message": "Media detache"}
+
+
+@api_router.delete("/media/{media_id}")
+async def delete_media(media_id: str, user: dict = Depends(get_current_user)):
+    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
+    if not media_doc:
+        raise HTTPException(status_code=404, detail="Media non trouve")
+
+    for li in media_doc.get("linked_items", []):
+        item_type = li.get("item_type")
+        item_id = li.get("item_id")
+        if item_type in ITEM_COLLECTIONS and item_id:
+            await ITEM_COLLECTIONS[item_type].update_one(
+                {"id": item_id, "user_id": user["id"]},
+                {"$pull": {"attachments": {"id": media_id}}}
+            )
+
+    if media_doc.get("kind") == "file" and media_doc.get("filename"):
+        file_path = UPLOAD_DIR / media_doc["filename"]
+        if file_path.exists():
+            file_path.unlink()
+
+    await db.media_items.delete_one({"id": media_id, "user_id": user["id"]})
+    return {"message": "Media supprime"}
+
 
 @api_router.post("/upload/{item_type}/{item_id}")
 async def upload_file(
     item_type: str,
     item_id: str,
     file: UploadFile = File(...),
+    preview_on_card: Optional[str] = Form(None),
     user: dict = Depends(get_current_user)
 ):
-    # Validate item type
-    collection_map = {
-        "inventory": db.inventory,
-        "wishlist": db.wishlist,
-        "content": db.content,
-        "portfolio": db.portfolio,
-        "project": db.projects,
-        "task": db.tasks
-    }
-    
-    if item_type not in collection_map:
-        raise HTTPException(status_code=400, detail="Type d'item invalide")
-    
-    # Check if item exists
-    collection = collection_map[item_type]
-    item = await collection.find_one({"id": item_id, "user_id": user["id"]})
-    if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
-    
-    # Save file
-    file_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix
-    filename = f"{file_id}{file_ext}"
-    file_path = UPLOAD_DIR / filename
-    
-    async with aiofiles.open(file_path, 'wb') as out_file:
-        content = await file.read()
-        await out_file.write(content)
-    
-    attachment = {
-        "id": file_id,
-        "filename": filename,
-        "original_name": file.filename,
-        "mime_type": file.content_type,
-        "size": len(content),
-        "uploaded_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    # Add attachment to item
-    await collection.update_one(
-        {"id": item_id},
-        {"$push": {"attachments": attachment}}
+    await _ensure_item(item_type, item_id, user["id"])
+    media_doc = await _create_media_from_upload(
+        user_id=user["id"],
+        file=file,
+        preview_on_card=_parse_bool(preview_on_card, False),
+        item_type=item_type,
+        item_id=item_id,
+        is_floating=False,
     )
-    
-    return attachment
+    return _build_attachment_from_media(media_doc)
+
 
 @api_router.delete("/upload/{item_type}/{item_id}/{file_id}")
 async def delete_file(
@@ -1209,37 +2092,23 @@ async def delete_file(
     file_id: str,
     user: dict = Depends(get_current_user)
 ):
-    collection_map = {
-        "inventory": db.inventory,
-        "wishlist": db.wishlist,
-        "content": db.content,
-        "portfolio": db.portfolio
-    }
-    
-    if item_type not in collection_map:
-        raise HTTPException(status_code=400, detail="Type d'item invalide")
-    
-    collection = collection_map[item_type]
-    item = await collection.find_one({"id": item_id, "user_id": user["id"]})
-    if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
-    
-    # Find and delete file
-    attachment = next((a for a in item.get("attachments", []) if a["id"] == file_id), None)
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
-    
-    file_path = UPLOAD_DIR / attachment["filename"]
-    if file_path.exists():
-        file_path.unlink()
-    
-    # Remove from item
-    await collection.update_one(
-        {"id": item_id},
+    await _ensure_item(item_type, item_id, user["id"])
+
+    media_doc = await db.media_items.find_one({"id": file_id, "user_id": user["id"]})
+    if media_doc:
+        if media_doc.get("kind") == "file" and media_doc.get("filename"):
+            file_path = UPLOAD_DIR / media_doc["filename"]
+            if file_path.exists():
+                file_path.unlink()
+        await db.media_items.delete_one({"id": file_id, "user_id": user["id"]})
+
+    col = ITEM_COLLECTIONS.get(item_type)
+    await col.update_one(
+        {"id": item_id, "user_id": user["id"]},
         {"$pull": {"attachments": {"id": file_id}}}
     )
-    
-    return {"message": "Fichier supprimé"}
+
+    return {"message": "Fichier supprime"}
 
 # ==================== DASHBOARD/STATS ROUTES ====================
 
@@ -1343,7 +2212,8 @@ async def global_search(
         "projects": [],
         "tasks": [],
         "content": [],
-        "portfolio": []
+        "portfolio": [],
+        "alerts": []
     }
     
     # Search collections
@@ -1388,6 +2258,12 @@ async def global_search(
     ).limit(10).to_list(10)
     results["content"] = content
     
+    # Search alerts
+    alerts = await db.alerts.find(
+        {"user_id": user_id, "$or": [{"item_name": search_query}, {"search_query": search_query}]},
+        {"_id": 0}
+    ).limit(10).to_list(10)
+    results["alerts"] = alerts
     # Search portfolio
     portfolio = await db.portfolio.find(
         {"user_id": user_id, "$or": [{"name": search_query}, {"symbol": search_query}, {"notes": search_query}]},
@@ -1504,7 +2380,7 @@ async def refresh_portfolio_prices(user: dict = Depends(get_current_user)):
     ).to_list(100)
     
     if not crypto_assets:
-        return {"updated": 0, "message": "Aucun actif crypto avec symbole trouvé"}
+        return {"updated": 0, "message": "Aucun actif crypto avec symbole trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
     
     # Get unique symbols
     symbols = list(set(a["symbol"] for a in crypto_assets if a.get("symbol")))
@@ -1544,11 +2420,11 @@ async def refresh_portfolio_prices(user: dict = Depends(get_current_user)):
                 )
                 updated_count += 1
         
-        return {"updated": updated_count, "message": f"{updated_count} prix mis à jour"}
+        return {"updated": updated_count, "message": f"{updated_count} prix mis ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â  jour"}
     
     except httpx.HTTPError as e:
         logger.error(f"Price refresh error: {e}")
-        raise HTTPException(status_code=503, detail="Impossible de récupérer les prix")
+        raise HTTPException(status_code=503, detail="Impossible de rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cupÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©rer les prix")
 
 # ==================== PRICE ALERTS ====================
 
@@ -1559,6 +2435,15 @@ class PriceAlertCreate(BaseModel):
     target_value: float  # Target price or percentage
     is_percentage: bool = False
     notify_email: bool = False
+    idealo_url: Optional[str] = None
+    denicheur_url: Optional[str] = None
+
+class PriceAlertUpdate(BaseModel):
+    alert_type: Optional[str] = None
+    target_value: Optional[float] = None
+    is_percentage: Optional[bool] = None
+    idealo_url: Optional[str] = None
+    denicheur_url: Optional[str] = None
 
 class PriceAlertResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1570,10 +2455,243 @@ class PriceAlertResponse(BaseModel):
     alert_type: str
     target_value: float
     is_percentage: bool
+    search_query: Optional[str] = None
+    source_url: Optional[str] = None
+    idealo_url: Optional[str] = None
+    denicheur_url: Optional[str] = None
+    store_offers: List[Dict[str, Any]] = []
+    min_price_total: Optional[float] = None
+    min_price_history: List[Dict[str, Any]] = []
     current_value: Optional[float] = None
     triggered: bool = False
     triggered_at: Optional[str] = None
     created_at: str
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        text = str(value).strip().replace("\u00a0", " ").replace(",", ".")
+        text = re.sub(r"[^0-9.\-]", "", text)
+        if not text:
+            return None
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_shipping_value(node: Dict[str, Any]) -> float:
+    for key in ("shipping", "shipping_cost", "shippingCost", "delivery_fee", "deliveryFee"):
+        value = _safe_float(node.get(key))
+        if value is not None:
+            return value
+
+    shipping_details = node.get("shippingDetails")
+    entries = shipping_details if isinstance(shipping_details, list) else [shipping_details]
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        for key in ("shippingRate", "shippingPrice", "price", "value"):
+            raw = entry.get(key)
+            if isinstance(raw, dict):
+                amount = _safe_float(raw.get("value") or raw.get("price"))
+            else:
+                amount = _safe_float(raw)
+            if amount is not None:
+                return amount
+
+    return 0.0
+
+
+def _store_name_from_offer(node: Dict[str, Any], fallback: str) -> str:
+    direct_keys = ["store_name", "store", "merchantName", "shopName", "sellerName", "vendorName", "retailer"]
+    for key in direct_keys:
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    for key in ("seller", "merchant", "vendor", "shop", "retailer"):
+        value = node.get(key)
+        if isinstance(value, dict):
+            name = value.get("name") or value.get("legalName") or value.get("displayName")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+        elif isinstance(value, str) and value.strip():
+            return value.strip()
+
+    raw_url = node.get("url") or node.get("offerUrl") or node.get("merchantUrl")
+    if isinstance(raw_url, str) and raw_url.strip():
+        host = urlparse(raw_url).netloc.lower().replace("www.", "")
+        if host:
+            return host
+
+    return fallback
+
+
+def _offer_price(node: Dict[str, Any]) -> Optional[float]:
+    for key in ("price", "lowPrice", "highPrice", "offerPrice", "finalPrice", "amount", "value"):
+        raw = node.get(key)
+        if isinstance(raw, dict):
+            value = _safe_float(raw.get("value") or raw.get("price") or raw.get("amount"))
+        else:
+            value = _safe_float(raw)
+        if value is not None:
+            return value
+    return None
+
+
+def _append_offer(offers: List[Dict[str, Any]], node: Dict[str, Any], source: str, fallback: str = "") -> None:
+    price = _offer_price(node)
+    if price is None:
+        return
+
+    shipping = _extract_shipping_value(node)
+    store_name = _store_name_from_offer(node, fallback)
+    if not store_name or store_name.lower().startswith("magasin"):
+        return
+    currency = str(node.get("priceCurrency") or "EUR")
+
+    offers.append({
+        "store_name": store_name,
+        "price": price,
+        "shipping": shipping,
+        "total": price + shipping,
+        "currency": currency,
+        "source": source,
+    })
+
+
+def _extract_store_offers_from_json_ld(node: Any, source: str, offers: List[Dict[str, Any]]) -> None:
+    if isinstance(node, list):
+        for child in node:
+            _extract_store_offers_from_json_ld(child, source, offers)
+        return
+
+    if not isinstance(node, dict):
+        return
+
+    offers_node = node.get("offers")
+    if offers_node is not None:
+        offer_list = offers_node if isinstance(offers_node, list) else [offers_node]
+        for idx, offer_node in enumerate(offer_list):
+            if isinstance(offer_node, dict):
+                _append_offer(offers, offer_node, source, f"Magasin {idx + 1}")
+
+    for child in node.values():
+        if isinstance(child, (dict, list)):
+            _extract_store_offers_from_json_ld(child, source, offers)
+
+
+def _extract_store_offers_with_regex(html: str, source: str) -> List[Dict[str, Any]]:
+    offers: List[Dict[str, Any]] = []
+
+    pattern = re.compile(
+        r'"(?:merchantName|shopName|sellerName|store_name|store)"\s*:\s*"(?P<store>[^"]+)".*?'
+        r'"(?:price|offerPrice|finalPrice|lowPrice)"\s*:\s*"?(?P<price>[0-9]+(?:[\.,][0-9]+)?)"?.*?'
+        r'(?:"(?:shipping|shippingCost|shipping_cost|delivery_fee)"\s*:\s*"?(?P<shipping>[0-9]+(?:[\.,][0-9]+)?)"?)?',
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    for match in pattern.finditer(html):
+        store = (match.group("store") or "").strip()
+        price = _safe_float(match.group("price"))
+        shipping = _safe_float(match.group("shipping")) or 0.0
+        if not store or price is None:
+            continue
+        offers.append({
+            "store_name": store,
+            "price": price,
+            "shipping": shipping,
+            "total": price + shipping,
+            "currency": "EUR",
+            "source": source,
+        })
+
+    return offers
+
+
+async def _extract_store_offers_from_html(url: str) -> List[Dict[str, Any]]:
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    if not any(domain in host for domain in ["idealo.", "ledenicheur."]):
+        return []
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            html = response.text
+    except Exception as exc:
+        logger.warning(f"Alert comparator fetch failed for {url}: {exc}")
+        return []
+
+    offers: List[Dict[str, Any]] = []
+    script_blocks = re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, flags=re.IGNORECASE | re.DOTALL)
+
+    for block in script_blocks:
+        raw = block.strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        _extract_store_offers_from_json_ld(data, host, offers)
+
+    if not offers:
+        offers.extend(_extract_store_offers_with_regex(html, host))
+
+    seen = set()
+    deduped: List[Dict[str, Any]] = []
+    for offer in offers:
+        store_name = str(offer.get("store_name", "")).strip()
+        if not store_name:
+            continue
+        price = _safe_float(offer.get("price"))
+        shipping = _safe_float(offer.get("shipping")) or 0.0
+        if price is None:
+            continue
+        key = (store_name.lower(), round(price, 2), round(shipping, 2), str(offer.get("source", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append({
+            **offer,
+            "store_name": store_name,
+            "price": price,
+            "shipping": shipping,
+            "total": price + shipping,
+        })
+
+    deduped.sort(key=lambda x: x.get("total", 0.0))
+    return deduped[:50]
+
+
+async def _fetch_alert_store_offers(idealo_url: Optional[str], denicheur_url: Optional[str]) -> List[Dict[str, Any]]:
+    urls = [u.strip() for u in [idealo_url, denicheur_url] if isinstance(u, str) and u.strip()]
+    if not urls:
+        return []
+
+    all_offers: List[Dict[str, Any]] = []
+    for url in urls:
+        extracted = await _extract_store_offers_from_html(url)
+        logger.info(f"Alert offers extracted from {url}: {len(extracted)}")
+        all_offers.extend(extracted)
+
+    dedup = {}
+    for offer in all_offers:
+        key = (str(offer.get("store_name", "")).strip().lower(), round(float(offer.get("price", 0.0)), 2), round(float(offer.get("shipping", 0.0)), 2))
+        dedup[key] = offer
+
+    merged = list(dedup.values())
+    merged.sort(key=lambda x: x.get("total", 0.0))
+    return merged[:50]
 
 @api_router.post("/alerts", response_model=PriceAlertResponse)
 async def create_price_alert(data: PriceAlertCreate, user: dict = Depends(get_current_user)):
@@ -1583,6 +2701,8 @@ async def create_price_alert(data: PriceAlertCreate, user: dict = Depends(get_cu
     # Get item details
     collection_map = {
         "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts,
         "wishlist": db.wishlist,
         "inventory": db.inventory
     }
@@ -1594,18 +2714,40 @@ async def create_price_alert(data: PriceAlertCreate, user: dict = Depends(get_cu
     item = await collection.find_one({"id": data.item_id, "user_id": user_id}, {"_id": 0})
     
     if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     
     # Get item name and current value
     item_name = item.get("name") or item.get("title", "Sans nom")
-    
+
     if data.item_type == "portfolio":
         current_value = item.get("current_price") or item.get("purchase_price")
     elif data.item_type == "wishlist":
         current_value = item.get("price")
     else:  # inventory
         current_value = item.get("current_value") or item.get("purchase_price")
-    
+
+    # Build richer comparator search query (name + useful metadata/reference)
+    metadata_values = []
+    for entry in item.get("metadata") or []:
+        if not isinstance(entry, dict):
+            continue
+        key = str(entry.get("key", "")).lower()
+        val = str(entry.get("value", "")).strip()
+        if not val:
+            continue
+        if any(token in key for token in ["ref", "reference", "sku", "model", "modele", "ean", "upc", "isbn", "part", "mpn", "brand", "marque"]):
+            metadata_values.append(val)
+
+    if len(metadata_values) < 3:
+        description = str(item.get("description", "")).strip()
+        if description:
+            metadata_values.append(description)
+
+    source_url = item.get("url")
+    search_parts = [item_name, *metadata_values]
+    # Keep order and remove duplicates
+    search_query = " ".join(dict.fromkeys([part for part in search_parts if part])).strip()
+
     alert_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
@@ -1618,6 +2760,13 @@ async def create_price_alert(data: PriceAlertCreate, user: dict = Depends(get_cu
         "alert_type": data.alert_type,
         "target_value": data.target_value,
         "is_percentage": data.is_percentage,
+        "search_query": search_query or item_name,
+        "source_url": source_url,
+        "idealo_url": data.idealo_url,
+        "denicheur_url": data.denicheur_url,
+        "store_offers": [],
+        "min_price_total": current_value,
+        "min_price_history": ([{"at": now, "value": float(current_value)}] if current_value is not None else []),
         "current_value": current_value,
         "triggered": False,
         "triggered_at": None,
@@ -1639,13 +2788,42 @@ async def get_alerts(user: dict = Depends(get_current_user), triggered: Optional
     alerts = await db.alerts.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return [PriceAlertResponse(**a) for a in alerts]
 
+@api_router.put("/alerts/{alert_id}", response_model=PriceAlertResponse)
+async def update_alert(alert_id: str, data: PriceAlertUpdate, user: dict = Depends(get_current_user)):
+    alert = await db.alerts.find_one({"id": alert_id, "user_id": user["id"]}, {"_id": 0})
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alerte non trouvee")
+
+    update_data: Dict[str, Any] = {}
+
+    if data.alert_type is not None:
+        update_data["alert_type"] = data.alert_type
+    if data.target_value is not None:
+        update_data["target_value"] = float(data.target_value)
+    if data.is_percentage is not None:
+        update_data["is_percentage"] = bool(data.is_percentage)
+    if data.idealo_url is not None:
+        update_data["idealo_url"] = data.idealo_url.strip() or None
+    if data.denicheur_url is not None:
+        update_data["denicheur_url"] = data.denicheur_url.strip() or None
+
+    if not update_data:
+        return PriceAlertResponse(**alert)
+
+    update_data["triggered"] = False
+    update_data["triggered_at"] = None
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.alerts.update_one({"id": alert_id, "user_id": user["id"]}, {"$set": update_data})
+    refreshed = await db.alerts.find_one({"id": alert_id, "user_id": user["id"]}, {"_id": 0})
+    return PriceAlertResponse(**refreshed)
 @api_router.delete("/alerts/{alert_id}")
 async def delete_alert(alert_id: str, user: dict = Depends(get_current_user)):
     """Delete a price alert"""
     result = await db.alerts.delete_one({"id": alert_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Alerte non trouvée")
-    return {"message": "Alerte supprimée"}
+        raise HTTPException(status_code=404, detail="Alerte non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e")
+    return {"message": "Alerte supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©e"}
 
 @api_router.post("/alerts/check")
 async def check_alerts(user: dict = Depends(get_current_user)):
@@ -1654,7 +2832,7 @@ async def check_alerts(user: dict = Depends(get_current_user)):
     
     # Get non-triggered alerts
     alerts = await db.alerts.find(
-        {"user_id": user_id, "triggered": False},
+        {"user_id": user_id},
         {"_id": 0}
     ).to_list(100)
     
@@ -1663,10 +2841,42 @@ async def check_alerts(user: dict = Depends(get_current_user)):
     
     collection_map = {
         "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts,
         "wishlist": db.wishlist,
         "inventory": db.inventory
     }
-    
+
+    def _as_float(value: Any) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _min_total_from_offers(offers: Any) -> Optional[float]:
+        if not isinstance(offers, list):
+            return None
+        totals: List[float] = []
+        for offer in offers:
+            if not isinstance(offer, dict):
+                continue
+            price = _as_float(offer.get("price"))
+            if price is None:
+                price = _as_float(offer.get("item_price"))
+            if price is None:
+                price = _as_float(offer.get("amount"))
+            if price is None:
+                continue
+            shipping = _as_float(offer.get("shipping"))
+            if shipping is None:
+                shipping = _as_float(offer.get("shipping_cost"))
+            if shipping is None:
+                shipping = _as_float(offer.get("delivery_fee"))
+            totals.append(price + (shipping if shipping is not None else 0.0))
+        return min(totals) if totals else None
+
     for alert in alerts:
         collection = collection_map.get(alert["item_type"])
         if collection is None:
@@ -1687,41 +2897,70 @@ async def check_alerts(user: dict = Depends(get_current_user)):
             current = item.get("current_value") or item.get("purchase_price", 0)
             base = item.get("purchase_price", 0)
         
-        if not current:
-            continue
+        fresh_offers = await _fetch_alert_store_offers(alert.get("idealo_url"), alert.get("denicheur_url"))
+        offers_for_alert = fresh_offers if fresh_offers else (alert.get("store_offers") or [])
+
+        current_num = _as_float(current)
+        min_offer_total = _min_total_from_offers(offers_for_alert)
+        min_total = min_offer_total if min_offer_total is not None else current_num
+        comparable_current = current_num if current_num is not None else min_offer_total
+        history = alert.get("min_price_history") if isinstance(alert.get("min_price_history"), list) else []
+        if min_total is not None:
+            should_append = True
+            if history:
+                last_value = _as_float(history[-1].get("value")) if isinstance(history[-1], dict) else None
+                if last_value is not None and abs(last_value - min_total) < 1e-9:
+                    should_append = False
+            if should_append:
+                history = [*history, {"at": now, "value": min_total}]
         
         triggered = False
         
         if alert["alert_type"] == "target_price":
             # Target price reached
-            triggered = current <= alert["target_value"]
+            triggered = (comparable_current is not None) and (comparable_current <= alert["target_value"])
         
-        elif alert["alert_type"] == "price_change_up" and base > 0:
+        elif alert["alert_type"] == "price_change_up" and _as_float(base) and _as_float(base) > 0 and comparable_current is not None:
             if alert["is_percentage"]:
-                change_pct = ((current - base) / base) * 100
+                base_value = _as_float(base) or 0
+                change_pct = ((comparable_current - base_value) / base_value) * 100
                 triggered = change_pct >= alert["target_value"]
             else:
-                triggered = current >= (base + alert["target_value"])
+                base_value = _as_float(base) or 0
+                triggered = comparable_current >= (base_value + alert["target_value"])
         
-        elif alert["alert_type"] == "price_change_down" and base > 0:
+        elif alert["alert_type"] == "price_change_down" and _as_float(base) and _as_float(base) > 0 and comparable_current is not None:
             if alert["is_percentage"]:
-                change_pct = ((base - current) / base) * 100
+                base_value = _as_float(base) or 0
+                change_pct = ((base_value - comparable_current) / base_value) * 100
                 triggered = change_pct >= alert["target_value"]
             else:
-                triggered = current <= (base - alert["target_value"])
+                base_value = _as_float(base) or 0
+                triggered = comparable_current <= (base_value - alert["target_value"])
         
+        update_fields: Dict[str, Any] = {
+            "current_value": comparable_current if comparable_current is not None else current_num,
+            "store_offers": offers_for_alert if isinstance(offers_for_alert, list) else [],
+            "min_price_total": min_total,
+            "min_price_history": history
+        }
+
         if triggered:
-            await db.alerts.update_one(
-                {"id": alert["id"]},
-                {"$set": {"triggered": True, "triggered_at": now, "current_value": current}}
-            )
+            update_fields["triggered"] = True
+            update_fields["triggered_at"] = now
             triggered_alerts.append({
                 "id": alert["id"],
                 "item_name": alert["item_name"],
                 "alert_type": alert["alert_type"],
                 "target_value": alert["target_value"],
-                "current_value": current
+                "current_value": comparable_current if comparable_current is not None else current_num,
+                "min_price_total": min_total
             })
+
+        await db.alerts.update_one(
+            {"id": alert["id"]},
+            {"$set": update_fields}
+        )
     
     return {
         "checked": len(alerts),
@@ -1750,7 +2989,9 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
-        "portfolio": db.portfolio
+        "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts
     }
     
     if data.source_type not in collection_map or data.target_type not in collection_map:
@@ -1764,11 +3005,11 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
     target_item = await target_col.find_one({"id": data.target_id, "user_id": user_id})
     
     if not source_item or not target_item:
-        raise HTTPException(status_code=404, detail="Item source ou cible non trouvé")
+        raise HTTPException(status_code=404, detail="Item source ou cible non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     
     # Get names for display
-    source_name = source_item.get("name") or source_item.get("title", "Sans nom")
-    target_name = target_item.get("name") or target_item.get("title", "Sans nom")
+    source_name = source_item.get("name") or source_item.get("title") or source_item.get("item_name") or "Sans nom"
+    target_name = target_item.get("name") or target_item.get("title") or target_item.get("item_name") or "Sans nom"
     
     now = datetime.now(timezone.utc).isoformat()
     
@@ -1802,7 +3043,7 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
     )
     
     return {
-        "message": "Lien créé",
+        "message": "Lien crÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©",
         "source": {"id": data.source_id, "name": source_name},
         "target": {"id": data.target_id, "name": target_name}
     }
@@ -1825,7 +3066,9 @@ async def unlink_items(
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
-        "portfolio": db.portfolio
+        "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts
     }
     
     source_col = collection_map.get(source_type)
@@ -1847,7 +3090,7 @@ async def unlink_items(
         {"$pull": {"links": {"item_id": source_id}}, "$set": {"updated_at": now}}
     )
     
-    return {"message": "Lien supprimé"}
+    return {"message": "Lien supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 @api_router.get("/links/{item_type}/{item_id}")
 async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_current_user)):
@@ -1861,7 +3104,9 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
-        "portfolio": db.portfolio
+        "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts
     }
     
     if item_type not in collection_map:
@@ -1871,7 +3116,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     item = await collection.find_one({"id": item_id, "user_id": user_id}, {"_id": 0})
     
     if not item:
-        raise HTTPException(status_code=404, detail="Item non trouvé")
+        raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     
     links = item.get("links", [])
     
@@ -1887,7 +3132,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
             if linked_item:
                 enriched_links.append({
                     **link,
-                    "item_name": linked_item.get("name") or linked_item.get("title", "Sans nom"),
+                    "item_name": linked_item.get("name") or linked_item.get("title") or linked_item.get("item_name") or "Sans nom",
                     "item_description": linked_item.get("description", "")
                 })
     
@@ -1950,7 +3195,7 @@ async def update_custom_type(type_id: str, data: CustomTypeUpdate, user: dict = 
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Type personnalisé non trouvé")
+        raise HTTPException(status_code=404, detail="Type personnalisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     result.pop("_id", None)
     return CustomTypeResponse(**result)
 
@@ -1958,8 +3203,8 @@ async def update_custom_type(type_id: str, data: CustomTypeUpdate, user: dict = 
 async def delete_custom_type(type_id: str, user: dict = Depends(get_current_user)):
     result = await db.custom_types.delete_one({"id": type_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Type personnalisé non trouvé")
-    return {"message": "Type supprimé"}
+        raise HTTPException(status_code=404, detail="Type personnalisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
+    return {"message": "Type supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 # ==================== TAGS MANAGEMENT ====================
 
@@ -1982,7 +3227,7 @@ class TagManageResponse(BaseModel):
 async def create_managed_tag(data: TagManageCreate, user: dict = Depends(get_current_user)):
     existing = await db.managed_tags.find_one({"user_id": user["id"], "name": data.name})
     if existing:
-        raise HTTPException(status_code=400, detail="Ce tag existe déjà")
+        raise HTTPException(status_code=400, detail="Ce tag existe dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©jÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â ")
     tag_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -2014,7 +3259,7 @@ async def get_managed_tags(user: dict = Depends(get_current_user)):
 async def update_managed_tag(tag_id: str, data: TagManageCreate, user: dict = Depends(get_current_user)):
     old_tag = await db.managed_tags.find_one({"id": tag_id, "user_id": user["id"]})
     if not old_tag:
-        raise HTTPException(status_code=404, detail="Tag non trouvé")
+        raise HTTPException(status_code=404, detail="Tag non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     old_name = old_tag["name"]
     new_name = data.name
     update_data = {"name": data.name, "color": data.color, "category": data.category}
@@ -2040,7 +3285,7 @@ async def update_managed_tag(tag_id: str, data: TagManageCreate, user: dict = De
 async def delete_managed_tag(tag_id: str, user: dict = Depends(get_current_user)):
     tag = await db.managed_tags.find_one({"id": tag_id, "user_id": user["id"]})
     if not tag:
-        raise HTTPException(status_code=404, detail="Tag non trouvé")
+        raise HTTPException(status_code=404, detail="Tag non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     tag_name = tag["name"]
     await db.managed_tags.delete_one({"id": tag_id})
     # Remove tag from all items
@@ -2050,7 +3295,7 @@ async def delete_managed_tag(tag_id: str, user: dict = Depends(get_current_user)
             {"user_id": user_id, "tags": tag_name},
             {"$pull": {"tags": tag_name}}
         )
-    return {"message": "Tag supprimé"}
+    return {"message": "Tag supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
 # ==================== MINDMAP DATA ====================
 
@@ -2069,6 +3314,7 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
     tasks_list = await db.tasks.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
     content_list = await db.content.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
     portfolio_list = await db.portfolio.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    physical_assets_list = await db.portfolio_v2_physical_assets.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
     
     type_config = {
         "collection": {"color": "#3b82f6", "items": collections_list},
@@ -2078,6 +3324,7 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
         "task": {"color": "#10b981", "items": tasks_list},
         "content": {"color": "#06b6d4", "items": content_list},
         "portfolio": {"color": "#f97316", "items": portfolio_list},
+        "portfolio_physical": {"color": "#14b8a6", "items": physical_assets_list},
     }
     
     seen_edges = set()
@@ -2127,7 +3374,7 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
                     edges.append({
                         "source": item["project_id"],
                         "target": item["id"],
-                        "label": "tâche",
+                        "label": "tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢che",
                     })
             
             # Add sub-project edges
@@ -2167,6 +3414,8 @@ async def get_all_tags(user: dict = Depends(get_current_user)):
         "wishlist": db.wishlist,
         "content": db.content,
         "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts,
         "projects": db.projects,
         "tasks": db.tasks,
     }
@@ -2192,6 +3441,8 @@ async def get_items_by_tag(tag_name: str, user: dict = Depends(get_current_user)
         "wishlist": db.wishlist,
         "content": db.content,
         "portfolio": db.portfolio,
+        "portfolio_physical": db.portfolio_v2_physical_assets,
+        "alert": db.alerts,
         "projects": db.projects,
         "tasks": db.tasks,
     }
@@ -2216,15 +3467,21 @@ async def get_collection_items(collection_id: str, user: dict = Depends(get_curr
         item["_item_type"] = "wishlist"
     return {"inventory": inventory, "wishlist": wishlist}
 
+class StoragePathUpdate(BaseModel):
+    path: str
+
+
 @api_router.get("/storage/usage")
 async def get_storage_usage(user: dict = Depends(get_current_user)):
     total_size = 0
     file_count = 0
     user_id = user["id"]
+
+    # Legacy files field support
     for col_name in ["inventory", "wishlist", "content", "portfolio", "projects", "tasks"]:
         col = getattr(db, col_name)
         items_with_files = await col.find(
-            {"user_id": user_id, "files": {"$exists": True, "$ne": []}},
+            {"user_id": user_id, "files": {"": True, "": []}},
             {"_id": 0, "files": 1}
         ).to_list(10000)
         for item in items_with_files:
@@ -2235,6 +3492,8 @@ async def get_storage_usage(user: dict = Depends(get_current_user)):
                     full_path = ROOT_DIR / filepath.lstrip("/")
                     if full_path.exists():
                         total_size += full_path.stat().st_size
+
+    # Media files under uploads
     disk_total = 0
     disk_count = 0
     if UPLOAD_DIR.exists():
@@ -2242,13 +3501,190 @@ async def get_storage_usage(user: dict = Depends(get_current_user)):
             if f.is_file():
                 disk_total += f.stat().st_size
                 disk_count += 1
+
+    usage_total = 0
+    usage_free = 0
+    try:
+        usage = shutil.disk_usage(str(STORAGE_ROOT))
+        usage_total = usage.total
+        usage_free = usage.free
+    except Exception:
+        pass
+
     return {
         "user_file_count": file_count,
         "user_size_bytes": total_size,
         "user_size_mb": round(total_size / (1024 * 1024), 2),
         "total_disk_bytes": disk_total,
         "total_disk_mb": round(disk_total / (1024 * 1024), 2),
-        "total_disk_files": disk_count
+        "total_disk_files": disk_count,
+        "capacity_total_bytes": usage_total,
+        "capacity_total_mb": round(usage_total / (1024 * 1024), 2) if usage_total else 0,
+        "capacity_free_bytes": usage_free,
+        "capacity_free_mb": round(usage_free / (1024 * 1024), 2) if usage_free else 0,
+    }
+
+
+@api_router.get("/storage/settings")
+async def get_storage_settings(user: dict = Depends(get_current_user)):
+    usage = await get_storage_usage(user)
+    return {
+        **usage,
+        "storage_root": str(STORAGE_ROOT),
+        "uploads_path": str(UPLOAD_DIR),
+    }
+
+
+@api_router.put("/storage/path")
+async def update_storage_path(data: StoragePathUpdate, user: dict = Depends(get_current_user)):
+    new_root = Path(data.path).expanduser()
+    if not new_root.is_absolute():
+        raise HTTPException(status_code=400, detail="Le chemin doit etre absolu")
+
+    new_root.mkdir(parents=True, exist_ok=True)
+    new_uploads = new_root / "uploads"
+    new_uploads.mkdir(parents=True, exist_ok=True)
+
+    env_path = ROOT_DIR / ".env"
+    existing = []
+    if env_path.exists():
+        existing = env_path.read_text(encoding="utf-8").splitlines()
+
+    updated = False
+    out_lines = []
+    for line in existing:
+        if line.startswith("STORAGE_ROOT="):
+            out_lines.append(f"STORAGE_ROOT={new_root}")
+            updated = True
+        else:
+            out_lines.append(line)
+    if not updated:
+        out_lines.append(f"STORAGE_ROOT={new_root}")
+
+    env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+    return {
+        "message": "Chemin de stockage mis a jour dans .env",
+        "storage_root": str(new_root),
+        "uploads_path": str(new_uploads),
+        "restart_required": True,
+    }
+
+
+EXPORT_COLLECTIONS = [
+    "collections",
+    "inventory",
+    "wishlist",
+    "projects",
+    "tasks",
+    "content",
+    "portfolio",
+    "portfolio_transactions",
+    "portfolio_snapshots",
+    "alerts",
+    "custom_types",
+    "managed_tags",
+    "portfolio_v2_status",
+    "portfolio_v2_deposits",
+    "portfolio_v2_sales",
+    "portfolio_v2_physical_assets",
+    "portfolio_v2_snapshots",
+    "media_items",
+]
+
+
+@api_router.post("/data/export")
+async def export_all_data(background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
+    user_id = user["id"]
+    tmp_dir = Path(tempfile.mkdtemp(prefix="mybase_export_"))
+    export_path = tmp_dir / f"mybase_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
+
+    payload = {
+        "metadata": {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "version": 1,
+        },
+        "collections": {},
+    }
+
+    for col_name in EXPORT_COLLECTIONS:
+        col = getattr(db, col_name)
+        rows = await col.find({"user_id": user_id}, {"_id": 0}).to_list(200000)
+        payload["collections"][col_name] = rows
+
+    json_path = tmp_dir / "data.json"
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with zipfile.ZipFile(export_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(json_path, arcname="data.json")
+        for media in payload["collections"].get("media_items", []):
+            if media.get("kind") == "file" and media.get("filename"):
+                fp = UPLOAD_DIR / media["filename"]
+                if fp.exists() and fp.is_file():
+                    zf.write(fp, arcname=f"uploads/{media['filename']}")
+
+    background_tasks.add_task(shutil.rmtree, tmp_dir, True)
+    return FileResponse(
+        str(export_path),
+        media_type="application/zip",
+        filename=export_path.name,
+    )
+
+
+@api_router.post("/data/import")
+async def import_all_data(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    user_id = user["id"]
+    tmp_dir = Path(tempfile.mkdtemp(prefix="mybase_import_"))
+    zip_path = tmp_dir / "import.zip"
+
+    raw = await file.read()
+    zip_path.write_bytes(raw)
+
+    inserted = {}
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        if "data.json" not in zf.namelist():
+            raise HTTPException(status_code=400, detail="Archive invalide: data.json manquant")
+
+        payload = json.loads(zf.read("data.json").decode("utf-8"))
+        collection_data = payload.get("collections", {})
+
+        # Wipe current user data first
+        for col_name in EXPORT_COLLECTIONS:
+            col = getattr(db, col_name)
+            await col.delete_many({"user_id": user_id})
+
+        # Reinsert all collections
+        for col_name in EXPORT_COLLECTIONS:
+            rows = collection_data.get(col_name, [])
+            clean_rows = []
+            for row in rows:
+                doc = {k: v for k, v in row.items() if k != "_id"}
+                doc["user_id"] = user_id
+                clean_rows.append(doc)
+            if clean_rows:
+                await getattr(db, col_name).insert_many(clean_rows)
+            inserted[col_name] = len(clean_rows)
+
+        # Restore uploaded media files
+        restored_files = 0
+        for name in zf.namelist():
+            if not name.startswith("uploads/") or name.endswith("/"):
+                continue
+            filename = Path(name).name
+            target = UPLOAD_DIR / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(name) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            restored_files += 1
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return {
+        "message": "Import termine",
+        "inserted": inserted,
+        "restored_files": restored_files,
     }
 
 
@@ -2317,3 +3753,45 @@ app.add_middleware(
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

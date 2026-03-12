@@ -1,15 +1,17 @@
-// craco.config.js
+﻿// craco.config.js
 const path = require("path");
 require("dotenv").config();
 
 // Check if we're in development/preview mode (not production build)
 // Craco sets NODE_ENV=development for start, NODE_ENV=production for build
 const isDevServer = process.env.NODE_ENV !== "production";
+const enableVisualEditsFromEnv = process.env.ENABLE_VISUAL_EDITS === "true";
 
 // Environment variable overrides
 const config = {
   enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",
-  enableVisualEdits: isDevServer, // Only enable during dev server
+  // Keep disabled by default because the metadata plugin can fail on some code paths.
+  enableVisualEdits: false,
 };
 
 // Conditionally load visual edits modules only in dev mode
@@ -104,3 +106,5 @@ webpackConfig.devServer = (devServerConfig) => {
 };
 
 module.exports = webpackConfig;
+
+

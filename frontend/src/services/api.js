@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const api = axios.create({
   baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
@@ -29,6 +29,12 @@ api.interceptors.response.use(
 );
 
 export default api;
+export { api };
+// Auth API
+export const authApi = {
+  me: () => api.get('/auth/me'),
+  updateAccount: (data) => api.put('/auth/account', data),
+};
 
 // Collections API
 export const collectionsApi = {
@@ -110,16 +116,37 @@ export const tagsApi = {
   getItemsByTag: (tagName) => api.get(`/tags/${encodeURIComponent(tagName)}/items`),
 };
 
-// Upload API
+// Upload API (legacy compat)
 export const uploadApi = {
-  upload: (itemType, itemId, file) => {
+  upload: (itemType, itemId, file, previewOnCard = false) => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('preview_on_card', String(!!previewOnCard));
     return api.post(`/upload/${itemType}/${itemId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
   delete: (itemType, itemId, fileId) => api.delete(`/upload/${itemType}/${itemId}/${fileId}`),
+};
+
+// Media API (file + link + floating + preview)
+export const mediaApi = {
+  list: (params) => api.get('/media', { params }),
+  upload: ({ file, itemType, itemId, isFloating = false, previewOnCard = false, title = '' }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (itemType) formData.append('item_type', itemType);
+    if (itemId) formData.append('item_id', itemId);
+    formData.append('is_floating', String(!!isFloating));
+    formData.append('preview_on_card', String(!!previewOnCard));
+    if (title) formData.append('title', title);
+    return api.post('/media/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  createLink: (data) => api.post('/media/link', data),
+  update: (id, data) => api.put(`/media/${id}`, data),
+  attach: (id, itemType, itemId) => api.post(`/media/${id}/attach`, { item_type: itemType, item_id: itemId }),
+  detach: (id, itemType, itemId) => api.delete(`/media/${id}/attach`, { params: { item_type: itemType, item_id: itemId } }),
+  delete: (id) => api.delete(`/media/${id}`),
 };
 
 // Crypto Prices API
@@ -133,6 +160,7 @@ export const cryptoApi = {
 export const alertsApi = {
   getAll: (triggered) => api.get('/alerts', { params: { triggered } }),
   create: (data) => api.post('/alerts', data),
+  update: (id, data) => api.put(`/alerts/${id}`, data),
   delete: (id) => api.delete(`/alerts/${id}`),
   check: () => api.post('/alerts/check'),
 };
@@ -174,6 +202,16 @@ export const mindmapApi = {
 // Storage API
 export const storageApi = {
   getUsage: () => api.get('/storage/usage'),
+  getSettings: () => api.get('/storage/settings'),
+  setStoragePath: (path) => api.put('/storage/path', { path }),
+  exportAll: () => api.post('/data/export', {}, { responseType: 'blob' }),
+  importAll: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/data/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Portfolio Transactions API
@@ -189,7 +227,41 @@ export const snapshotsApi = {
   create: () => api.post('/portfolio/snapshots'),
 };
 
+// Portfolio V2 API (account/site/object centric)
+export const portfolioV2Api = {
+  getStatus: () => api.get('/portfolio-v2/status'),
+  createStatus: (data) => api.post('/portfolio-v2/status', data),
+  updateStatus: (id, data) => api.put(`/portfolio-v2/status/${id}`, data),
+  deleteStatus: (id) => api.delete(`/portfolio-v2/status/${id}`),
+
+  getRecap: () => api.get('/portfolio-v2/recap'),
+
+  getDeposits: (accountName) => api.get('/portfolio-v2/deposits', { params: { account_name: accountName } }),
+  createDeposit: (data) => api.post('/portfolio-v2/deposits', data),
+  updateDeposit: (id, data) => api.put(`/portfolio-v2/deposits/${id}`, data),
+  deleteDeposit: (id) => api.delete(`/portfolio-v2/deposits/${id}`),
+
+  getSales: () => api.get('/portfolio-v2/sales'),
+  createSale: (data) => api.post('/portfolio-v2/sales', data),
+  updateSale: (id, data) => api.put(`/portfolio-v2/sales/${id}`, data),
+  deleteSale: (id) => api.delete(`/portfolio-v2/sales/${id}`),
+
+  getPhysicalAssets: () => api.get('/portfolio-v2/physical-assets'),
+  createPhysicalAsset: (data) => api.post('/portfolio-v2/physical-assets', data),
+  updatePhysicalAsset: (id, data) => api.put(`/portfolio-v2/physical-assets/${id}`, data),
+  deletePhysicalAsset: (id) => api.delete(`/portfolio-v2/physical-assets/${id}`),
+
+  getSnapshots: () => api.get('/portfolio-v2/snapshots'),
+  createSnapshot: (data) => api.post('/portfolio-v2/snapshots', data),
+  updateSnapshot: (id, data) => api.put(`/portfolio-v2/snapshots/${id}`, data),
+  deleteSnapshot: (id) => api.delete(`/portfolio-v2/snapshots/${id}`),
+};
 // Calendar API
 export const calendarApi = {
   getEvents: () => api.get('/calendar/events'),
 };
+
+
+
+
+

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import {
@@ -50,3 +50,4 @@ export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtre
     </Popover>
   );
 };
+

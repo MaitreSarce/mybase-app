@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -14,6 +14,7 @@ import AlertsPage from "./pages/AlertsPage";
 import TagsPage from "./pages/TagsPage";
 import MindmapPage from "./pages/MindmapPage";
 import CalendarPage from "./pages/CalendarPage";
+import HomeAssistantPage from "./pages/HomeAssistantPage";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -83,6 +84,7 @@ function App() {
             <Route path="tags" element={<TagsPage />} />
             <Route path="mindmap" element={<MindmapPage />} />
             <Route path="calendar" element={<CalendarPage />} />
+            <Route path="home-assistant" element={<HomeAssistantPage />} />
           </Route>
         </Routes>
         <Toaster richColors position="bottom-right" />

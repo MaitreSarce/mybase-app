@@ -7,17 +7,19 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import {
   Link2, Plus, Search, X, Loader2, Package, Heart,
-  FolderKanban, CheckSquare, BookOpen, TrendingUp, Layers
+  FolderKanban, CheckSquare, BookOpen, TrendingUp, Layers, Bell
 } from 'lucide-react';
 
 const ITEM_TYPES = [
   { value: 'inventory', label: 'Inventaire', icon: Package },
   { value: 'wishlist', label: 'Souhaits', icon: Heart },
   { value: 'project', label: 'Projets', icon: FolderKanban },
-  { value: 'task', label: 'TÃ¢ches', icon: CheckSquare },
+  { value: 'task', label: 'Tâches', icon: CheckSquare },
   { value: 'content', label: 'Contenu', icon: BookOpen },
   { value: 'portfolio', label: 'Portefeuille', icon: TrendingUp },
+  { value: 'portfolio_physical', label: 'Actif physique', icon: Package },
   { value: 'collection', label: 'Collections', icon: Layers },
+  { value: 'alert', label: 'Alertes', icon: Bell },
 ];
 
 const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
@@ -56,20 +58,20 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
         source_type: itemType, source_id: itemId,
         target_type: targetType, target_id: targetId, label: null
       });
-      toast.success(`LiÃ© Ã  "${targetName}"`);
+      toast.success(`Lié à "${targetName}"`);
       setShowSearch(false);
       setSearchQuery('');
       setSearchResults(null);
       fetchLinks();
       if (onUpdate) onUpdate();
-    } catch { toast.error('Erreur lors de la crÃ©ation du lien'); }
+    } catch { toast.error('Erreur lors de la création du lien'); }
     finally { setLinking(false); }
   };
 
   const handleUnlink = async (link) => {
     try {
       await linksApi.delete(itemType, itemId, link.item_type, link.item_id);
-      toast.success('Lien supprimÃ©');
+      toast.success('Lien supprimé');
       fetchLinks();
       if (onUpdate) onUpdate();
     } catch { toast.error('Erreur'); }
@@ -86,14 +88,16 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
       task: searchResults.tasks || [],
       content: searchResults.content || [],
       portfolio: searchResults.portfolio || [],
+      portfolio_physical: searchResults.portfolio_physical || [],
       collection: searchResults.collections || [],
+      alert: searchResults.alerts || [],
     };
     return map[type] || [];
   };
 
   return (
-    <div className="space-y-3 border-t border-border pt-3">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 border-t border-border pt-3 w-full min-w-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 w-full min-w-0">
         <Label className="text-sm font-medium flex items-center gap-2">
           <Link2 className="h-4 w-4" /> Liens ({links.length})
         </Label>
@@ -110,10 +114,10 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
             const info = getTypeInfo(link.item_type);
             const Icon = info.icon;
             return (
-              <div key={i} className="flex items-center justify-between p-2 rounded bg-secondary/30 group">
+              <div key={i} className="flex items-center justify-between gap-2 p-2 rounded bg-secondary/30 group min-w-0 overflow-hidden">
                 <div className="flex items-center gap-2 min-w-0">
                   <Icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="text-sm truncate">{link.item_name}</span>
+                  <span className="text-sm truncate break-all">{link.item_name}</span>
                   <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
                 </div>
                 <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"
@@ -130,7 +134,7 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
       {showSearch && (
         <div className="space-y-3 border border-border rounded-lg p-3 bg-background">
           <div className="flex gap-2">
-            <Input placeholder="Rechercher un Ã©lÃ©ment..." value={searchQuery}
+            <Input placeholder="Rechercher un élément..." value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSearch())}
               data-testid="link-search-input" className="flex-1" />
@@ -139,7 +143,7 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
             </Button>
           </div>
           {searchResults && (
-            <div className="max-h-48 overflow-y-auto space-y-2">
+            <div className="max-h-48 overflow-y-auto overflow-x-hidden space-y-2 min-w-0">
               {ITEM_TYPES.map(type => {
                 const results = getResultsForType(type.value);
                 if (!results.length) return null;
@@ -148,15 +152,17 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
                     <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                       <type.icon className="h-3 w-3" /> {type.label}
                     </p>
-                    {results.map(item => (
+                    {results.map(item => {
+                      const displayName = item.name || item.title || item.item_name || 'Sans nom';
+                      return (
                       <button key={item.id} disabled={linking || item.id === itemId}
-                        className="w-full flex items-center justify-between p-1.5 rounded hover:bg-secondary/50 text-left text-sm disabled:opacity-30"
-                        onClick={() => handleLink(type.value, item.id, item.name || item.title)}
+                        className="w-full min-w-0 flex items-center justify-between gap-2 p-1.5 rounded hover:bg-secondary/50 text-left text-sm disabled:opacity-30"
+                        onClick={() => handleLink(type.value, item.id, displayName)}
                         type="button">
-                        <span className="truncate">{item.name || item.title}</span>
+                        <span className="truncate">{displayName}</span>
                         <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       </button>
-                    ))}
+                    )})}
                   </div>
                 );
               })}
@@ -169,3 +175,8 @@ const ItemLinksManager = ({ itemType, itemId, itemName, onUpdate }) => {
 };
 
 export default ItemLinksManager;
+
+
+
+
+

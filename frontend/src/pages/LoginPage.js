@@ -67,7 +67,7 @@ const LoginPage = () => {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
@@ -103,3 +103,4 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
+

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { inventoryApi, collectionsApi, tagsApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -20,10 +20,12 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
-import { Plus, MoreVertical, Pencil, Trash2, Package, Loader2, Search, Tag, X } from 'lucide-react';
+import { Plus, MoreVertical, Pencil, Trash2, Package, Loader2, Search, Tag, X, FileText } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
 import ItemLinksManager from '../components/ItemLinksManager';
+import FileUploader from '../components/FileUploader';
+import { isImageUrl, isVideoUrl, isDocumentUrl, getVideoEmbedUrl, getDocumentLabel } from '../lib/mediaPreview';
 
 const InventoryPage = () => {
   const [items, setItems] = useState([]);
@@ -116,6 +118,27 @@ const InventoryPage = () => {
   };
   const removeTag = (t) => setFormData({ ...formData, tags: formData.tags.filter(x => x !== t) });
   const fmt = (v) => v ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v) : '-';
+  const getPreviewAttachment = (item) => (item.attachments || []).find((a) => a?.preview_on_card);
+  const previewUrl = (attachment) => {
+    if (!attachment) return null;
+    if (attachment.url) return attachment.url;
+    if (attachment.filename) return `${process.env.REACT_APP_BACKEND_URL}/uploads/${attachment.filename}`;
+    return null;
+  };
+  const isImagePreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '');
+    if (mime.startsWith('image/')) return true;
+    return isImageUrl(attachment?.url);
+  };
+  const isVideoPreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '');
+    if (mime.startsWith('video/')) return true;
+    return isVideoUrl(attachment?.url) || Boolean(getVideoEmbedUrl(attachment?.url));
+  };
+  const isDocumentPreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '').toLowerCase();
+    return mime.includes('pdf') || mime.includes('sheet') || mime.includes('excel') || mime.includes('word') || mime.includes('csv') || isDocumentUrl(attachment?.url);
+  };
 
   const filteredItems = items.filter(item => {
     if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -186,6 +209,34 @@ const InventoryPage = () => {
                 </DropdownMenu>
               </CardHeader>
               <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
+                {(() => {
+                  const preview = getPreviewAttachment(item);
+                  const url = previewUrl(preview);
+                  if (!url) return null;
+                  if (isImagePreview(preview)) {
+                    return <img src={url} alt={item.name} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" />;
+                  }
+                  if (isVideoPreview(preview)) {
+                    const embedUrl = getVideoEmbedUrl(url);
+                    return embedUrl ? (
+                      <iframe src={embedUrl} title={item.name} className="w-full h-32 rounded-md mb-2 border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                    ) : (
+                      <video src={url} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" controls preload="metadata" />
+                    );
+                  }
+                  if (isDocumentPreview(preview)) {
+                    return (
+                      <div className="w-full h-32 rounded-md mb-2 border border-border/40 bg-secondary/20 flex items-center gap-3 px-3">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
+                          <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Valeur</span>
@@ -298,9 +349,10 @@ const InventoryPage = () => {
                 <div className="space-y-2 col-span-2">
                   <Label>Tags</Label>
                   <div className="flex gap-2">
-                    <Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Ajouter un tag..." />
+                    <Input value={newTag} list="inventory-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Ajouter un tag..." />
                     <Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button>
                   </div>
+                  <datalist id="inventory-tag-suggestions">{allTags.map(t => <option key={t.name} value={t.name} />)}</datalist>
                   {formData.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {formData.tags.map(tag => <Badge key={tag} variant="secondary" className="gap-1">{tag}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} /></Badge>)}
@@ -309,6 +361,7 @@ const InventoryPage = () => {
                 </div>
               </div>
               {editingItem && <ItemLinksManager itemType="inventory" itemId={editingItem.id} itemName={editingItem.name} onUpdate={fetchData} />}
+              {editingItem && <FileUploader itemType="inventory" itemId={editingItem.id} onUpdate={fetchData} />}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
@@ -325,3 +378,8 @@ const InventoryPage = () => {
 };
 
 export default InventoryPage;
+
+
+
+
+

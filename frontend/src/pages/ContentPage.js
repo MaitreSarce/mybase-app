@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { contentApi, tagsApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -27,6 +27,8 @@ import {
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
 import ItemLinksManager from '../components/ItemLinksManager';
+import FileUploader from '../components/FileUploader';
+import { isImageUrl, isVideoUrl, isDocumentUrl, getVideoEmbedUrl, getDocumentLabel } from '../lib/mediaPreview';
 
 const DEFAULT_TYPES = [
   { value: 'recipe', label: 'Recette', icon: ChefHat, color: 'text-orange-400' },
@@ -110,6 +112,27 @@ const ContentPage = () => {
   const removeTag = (t) => setFormData({ ...formData, tags: formData.tags.filter(x => x !== t) });
 
   const getTypeInfo = (type) => allContentTypes.find(t => t.value === type) || { label: type, icon: FileText, color: 'text-zinc-400' };
+  const getPreviewAttachment = (item) => (item.attachments || []).find((a) => a?.preview_on_card);
+  const previewUrl = (attachment) => {
+    if (!attachment) return null;
+    if (attachment.url) return attachment.url;
+    if (attachment.filename) return `${process.env.REACT_APP_BACKEND_URL}/uploads/${attachment.filename}`;
+    return null;
+  };
+  const isImagePreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '');
+    if (mime.startsWith('image/')) return true;
+    return isImageUrl(attachment?.url);
+  };
+  const isVideoPreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '');
+    if (mime.startsWith('video/')) return true;
+    return isVideoUrl(attachment?.url) || Boolean(getVideoEmbedUrl(attachment?.url));
+  };
+  const isDocumentPreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '').toLowerCase();
+    return mime.includes('pdf') || mime.includes('sheet') || mime.includes('excel') || mime.includes('word') || mime.includes('csv') || isDocumentUrl(attachment?.url);
+  };
 
   const filteredItems = items.filter(item => {
     if (searchQuery && !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) && !item.description?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -163,6 +186,34 @@ const ContentPage = () => {
                   </DropdownMenu>
                 </CardHeader>
                 <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
+                  {(() => {
+                    const preview = getPreviewAttachment(item);
+                    const url = previewUrl(preview);
+                    if (!url) return null;
+                    if (isImagePreview(preview)) {
+                      return <img src={url} alt={item.title} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" />;
+                    }
+                    if (isVideoPreview(preview)) {
+                      const embedUrl = getVideoEmbedUrl(url);
+                      return embedUrl ? (
+                        <iframe src={embedUrl} title={item.title} className="w-full h-32 rounded-md mb-2 border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                      ) : (
+                        <video src={url} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" controls preload="metadata" />
+                      );
+                    }
+                    if (isDocumentPreview(preview)) {
+                      return (
+                        <div className="w-full h-32 rounded-md mb-2 border border-border/40 bg-secondary/20 flex items-center gap-3 px-3">
+                          <FileText className="h-8 w-8 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
+                            <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
                   {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"><ExternalLink className="h-3 w-3" />{item.url.replace(/^https?:\/\//, '').substring(0, 40)}</a>}
                   {item.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{item.tags.slice(0, 3).map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}</div>}
@@ -209,10 +260,12 @@ const ContentPage = () => {
               <div className="space-y-2"><Label>Lien / URL source</Label><Input type="url" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} placeholder="https://..." data-testid="content-url-input" /></div>
               <div className="space-y-2"><Label>Catégorie</Label><Input value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Cuisine, Électronique..." /></div>
               <div className="space-y-2"><Label>Tags</Label>
-                <div className="flex gap-2"><Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
+                <div className="flex gap-2"><Input value={newTag} list="content-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
+                <datalist id="content-tag-suggestions">{allTags.map(t => <option key={t.name} value={t.name} />)}</datalist>
                 {formData.tags.length > 0 && <div className="flex flex-wrap gap-2 mt-2">{formData.tags.map(t => <Badge key={t} variant="secondary" className="gap-1">{t}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(t)} /></Badge>)}</div>}
               </div>
               {editingItem && <ItemLinksManager itemType="content" itemId={editingItem.id} itemName={editingItem.title} onUpdate={fetchData} />}
+              {editingItem && <FileUploader itemType="content" itemId={editingItem.id} onUpdate={fetchData} />}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
@@ -226,3 +279,8 @@ const ContentPage = () => {
 };
 
 export default ContentPage;
+
+
+
+
+

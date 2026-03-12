@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { mindmapApi, tagsApi, linksApi } from '../services/api';
 import { toast } from 'sonner';
 import {
@@ -7,21 +7,42 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, CardContent } from '../components/ui/card';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '../components/ui/select';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
-import { RefreshCw, Loader2, Network, X } from 'lucide-react';
+import { RefreshCw, Loader2, Network, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 
 const TYPE_LABELS = {
-  collection: 'Collection', inventory: 'Inventaire', wishlist: 'Souhait',
-  project: 'Projet', task: 'Tache', content: 'Contenu', portfolio: 'Actif',
+  collection: 'Collection',
+  inventory: 'Inventaire',
+  wishlist: 'Souhaits',
+  project: 'Projet',
+  task: 'Tache',
+  content: 'Contenu',
+  portfolio: 'Portefeuille',
+  portfolio_physical: 'Actif physique',
 };
+const ITEM_TYPES = Object.keys(TYPE_LABELS);
 
 const TYPE_COLORS = {
   collection: '#3b82f6', inventory: '#8b5cf6', wishlist: '#ec4899',
-  project: '#f59e0b', task: '#10b981', content: '#06b6d4', portfolio: '#f97316',
+  project: '#f59e0b', task: '#10b981', content: '#06b6d4', portfolio: '#f97316', portfolio_physical: '#14b8a6',
 };
+const HIERARCHY_PRESETS = {
+  projects_first: {
+    label: 'Projet > Sous-projet > Tache > Contenu > Inventaire > Souhaits > Actif physique',
+    order: ['project', 'task', 'content', 'inventory', 'wishlist', 'collection', 'portfolio', 'portfolio_physical'],
+  },
+  collections_first: {
+    label: 'Collection > Inventaire > Souhaits > Contenu > Projet > Tache > Actif physique',
+    order: ['collection', 'inventory', 'wishlist', 'content', 'project', 'task', 'portfolio', 'portfolio_physical'],
+  },
+};
+
 
 const CustomNode = ({ data }) => (
   <div
@@ -55,6 +76,8 @@ const MindmapPage = () => {
   const [filterTypes, setFilterTypes] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
+  const [layoutMode, setLayoutMode] = useState('tree');
+  const [hierarchyOrder, setHierarchyOrder] = useState(HIERARCHY_PRESETS.projects_first.order);
 
   const nodeTypeMap = useMemo(() => {
     const map = {};
@@ -84,7 +107,6 @@ const MindmapPage = () => {
       fetchData();
     } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
   }, [nodeTypeMap, fetchData]);
-
   const handleEdgesDelete = useCallback(async (deletedEdges) => {
     for (const edge of deletedEdges) {
       const sourceType = nodeTypeMap[edge.source];
@@ -98,23 +120,45 @@ const MindmapPage = () => {
     fetchData();
   }, [nodeTypeMap, fetchData]);
 
+  
+
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Compute connected node IDs for focus mode
   const connectedNodeIds = useMemo(() => {
     if (!focusedNodeId) return null;
-    const ids = new Set([focusedNodeId]);
-    rawData.edges.forEach(e => {
-      if (e.source === focusedNodeId) ids.add(e.target);
-      if (e.target === focusedNodeId) ids.add(e.source);
+
+    // Keep the full connected component of the clicked node
+    // so we include all direct and indirect parents/children.
+    const adjacency = new Map();
+    rawData.edges.forEach((e) => {
+      if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
+      if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
+      adjacency.get(e.source).add(e.target);
+      adjacency.get(e.target).add(e.source);
     });
-    return ids;
+
+    const visited = new Set([focusedNodeId]);
+    const queue = [focusedNodeId];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const neighbors = adjacency.get(current);
+      if (!neighbors) continue;
+
+      neighbors.forEach((nextId) => {
+        if (!visited.has(nextId)) {
+          visited.add(nextId);
+          queue.push(nextId);
+        }
+      });
+    }
+
+    return visited;
   }, [focusedNodeId, rawData.edges]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!rawData.nodes.length) { setNodes([]); setEdges([]); return; }
 
-    // Apply filters
     let filteredNodes = rawData.nodes;
     if (filterTypes.length > 0) {
       filteredNodes = filteredNodes.filter(n => filterTypes.includes(n.type));
@@ -122,21 +166,75 @@ const MindmapPage = () => {
     if (filterTags.length > 0) {
       filteredNodes = filteredNodes.filter(n => n.tags?.some(t => filterTags.includes(t)));
     }
+    if (connectedNodeIds) {
+      filteredNodes = filteredNodes.filter(n => connectedNodeIds.has(n.id));
+    }
 
-    const nodeCount = filteredNodes.length;
-    const radius = Math.max(300, nodeCount * 40);
-    const centerX = radius + 100;
-    const centerY = radius + 100;
+    const levelByType = Object.fromEntries(hierarchyOrder.map((type, index) => [type, index]));
 
-    const flowNodes = filteredNodes.map((n, i) => {
-      const angle = (2 * Math.PI * i) / nodeCount;
-      const dimmed = connectedNodeIds ? !connectedNodeIds.has(n.id) : false;
-      return {
-        id: n.id, type: 'custom',
-        position: { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) },
-        data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
-      };
-    });
+    let flowNodes;
+
+    if (layoutMode === 'tree') {
+      const groups = {};
+      filteredNodes.forEach((node) => {
+        const level = levelByType[node.type] ?? hierarchyOrder.length;
+        if (!groups[level]) groups[level] = [];
+        groups[level].push(node);
+      });
+
+      const levels = Object.keys(groups).map(Number).sort((a, b) => a - b);
+      flowNodes = [];
+      const prevOrderMap = new Map();
+
+      levels.forEach((level) => {
+        const nodesAtLevel = [...groups[level]];
+
+        if (level > 0) {
+          const prevLevelNodes = groups[level - 1] || [];
+          prevLevelNodes.forEach((n, idx) => prevOrderMap.set(n.id, idx));
+          nodesAtLevel.sort((a, b) => {
+            const aLinks = rawData.edges
+              .filter(e => e.target === a.id || e.source === a.id)
+              .map(e => (e.target === a.id ? e.source : e.target))
+              .filter(id => prevOrderMap.has(id));
+            const bLinks = rawData.edges
+              .filter(e => e.target === b.id || e.source === b.id)
+              .map(e => (e.target === b.id ? e.source : e.target))
+              .filter(id => prevOrderMap.has(id));
+
+            const aScore = aLinks.length ? aLinks.reduce((s, id) => s + prevOrderMap.get(id), 0) / aLinks.length : Number.MAX_SAFE_INTEGER;
+            const bScore = bLinks.length ? bLinks.reduce((s, id) => s + prevOrderMap.get(id), 0) / bLinks.length : Number.MAX_SAFE_INTEGER;
+            return aScore - bScore;
+          });
+        }
+
+        nodesAtLevel.forEach((n, idx) => {
+          const dimmed = connectedNodeIds ? !connectedNodeIds.has(n.id) : false;
+          flowNodes.push({
+            id: n.id,
+            type: 'custom',
+            position: { x: 80 + (level * 360), y: 60 + (idx * 110) },
+            data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
+          });
+        });
+      });
+    } else {
+      const nodeCount = Math.max(filteredNodes.length, 1);
+      const radius = Math.max(300, nodeCount * 40);
+      const centerX = radius + 100;
+      const centerY = radius + 100;
+
+      flowNodes = filteredNodes.map((n, i) => {
+        const angle = (2 * Math.PI * i) / nodeCount;
+        const dimmed = connectedNodeIds ? !connectedNodeIds.has(n.id) : false;
+        return {
+          id: n.id,
+          type: 'custom',
+          position: { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) },
+          data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
+        };
+      });
+    }
 
     const nodeIds = new Set(flowNodes.map(n => n.id));
     const flowEdges = rawData.edges
@@ -149,13 +247,23 @@ const MindmapPage = () => {
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [rawData, filterTypes, filterTags, connectedNodeIds, setNodes, setEdges]);
+  }, [rawData, filterTypes, filterTags, connectedNodeIds, layoutMode, hierarchyOrder, setNodes, setEdges]);
 
   const handleNodeClick = useCallback((_, node) => {
     setFocusedNodeId(prev => prev === node.id ? null : node.id);
   }, []);
 
   const handleRefresh = () => { setRefreshing(true); fetchData(); };
+
+  const moveHierarchyType = (index, direction) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= hierarchyOrder.length) return;
+    const next = [...hierarchyOrder];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setHierarchyOrder(next);
+  };
+
+  const resetHierarchy = () => setHierarchyOrder(HIERARCHY_PRESETS.projects_first.order);
 
   const typeOpts = Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v }));
   const tagOpts = allTags.map(t => ({ value: t.name, label: t.name }));
@@ -173,6 +281,32 @@ const MindmapPage = () => {
           <p className="text-muted-foreground mt-1">Visualisez les connexions entre vos elements</p>
         </div>
         <div className="flex flex-wrap gap-2 items-start">
+          <Select value={layoutMode} onValueChange={setLayoutMode}>
+            <SelectTrigger className="w-[150px]" data-testid="mindmap-layout-mode">
+              <SelectValue placeholder="Disposition" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tree">Mode arbre</SelectItem>
+              <SelectItem value="radial">Mode radial</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="rounded-md border border-border px-2 py-1" data-testid="mindmap-hierarchy-order">
+            <div className="text-xs text-muted-foreground mb-1">Ordre hiérarchique</div>
+            <div className="flex flex-wrap gap-1">
+              {hierarchyOrder.map((type, index) => (
+                <Badge key={`${type}-${index}`} variant="secondary" className="gap-1 px-2 py-1">
+                  {index + 1}. {TYPE_LABELS[type] || type}
+                  <button type="button" onClick={() => moveHierarchyType(index, -1)} disabled={index === 0}>
+                    <ChevronUp className="h-3 w-3" />
+                  </button>
+                  <button type="button" onClick={() => moveHierarchyType(index, 1)} disabled={index === hierarchyOrder.length - 1}>
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              <Button type="button" variant="ghost" size="sm" onClick={resetHierarchy}>Reset</Button>
+            </div>
+          </div>
           <MultiSelect options={typeOpts} selected={filterTypes} onChange={setFilterTypes} placeholder="Sections" testId="mindmap-filter-types" />
           {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="mindmap-filter-tags" />}
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="mindmap-refresh-btn">
@@ -229,3 +363,26 @@ const MindmapPage = () => {
 };
 
 export default MindmapPage;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
