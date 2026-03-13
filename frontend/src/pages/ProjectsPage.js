@@ -665,7 +665,9 @@ const ProjectsPage = () => {
                     if (row.kind === 'project') {
                       const project = row.project;
                       const aggregateStats = getProjectAggregateStats(project.id);
-                      const hasChildren = getChildren(project.id).length > 0;
+                      const hasChildrenProjects = getChildren(project.id).length > 0;
+                      const hasDirectTasks = tasks.some((t) => t.project_id === project.id);
+                      const hasChildren = hasChildrenProjects || hasDirectTasks;
                       const isCollapsed = !!collapsedHierarchyProjects[project.id];
                       return (
                         <TableRow key={`h-project-${project.id}-${index}`} className="hover:bg-secondary/20">
