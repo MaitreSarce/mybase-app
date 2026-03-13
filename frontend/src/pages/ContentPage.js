@@ -116,7 +116,7 @@ const ContentPage = () => {
   const previewUrl = (attachment) => {
     if (!attachment) return null;
     if (attachment.url) return attachment.url;
-    if (attachment.filename) return `${process.env.REACT_APP_BACKEND_URL}/uploads/${attachment.filename}`;
+    if (attachment.filename) return `${(process.env.REACT_APP_BACKEND_URL || '')}/uploads/${attachment.filename}`;
     return null;
   };
   const isImagePreview = (attachment) => {

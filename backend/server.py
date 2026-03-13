@@ -2272,15 +2272,14 @@ async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends
         {"id": media_id, "user_id": user["id"]},
         {"$set": update_data}
     )
-
     media_doc.update(update_data)
 
-    if "preview_on_card" in update_data:
-        for li in media_doc.get("linked_items", []):
-            item_type = li.get("item_type")
-            item_id = li.get("item_id")
-            if item_type in ITEM_COLLECTIONS and item_id:
-                await _sync_attachment_for_item(media_doc, item_type, item_id, user["id"])
+    # Sync attachments for every linked item
+    for li in media_doc.get("linked_items", []):
+        item_type = li.get("item_type")
+        item_id = li.get("item_id")
+        if item_type in ITEM_COLLECTIONS and item_id:
+            await _sync_attachment_for_item(media_doc, item_type, item_id, user["id"])
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
     return _serialize_media(saved)
@@ -2312,14 +2311,12 @@ async def delete_media(media_id: str, user: dict = Depends(get_current_user)):
     if not media_doc:
         raise HTTPException(status_code=404, detail="Media non trouve")
 
-    for li in media_doc.get("linked_items", []):
-        item_type = li.get("item_type")
-        item_id = li.get("item_id")
-        if item_type in ITEM_COLLECTIONS and item_id:
-            await ITEM_COLLECTIONS[item_type].update_one(
-                {"id": item_id, "user_id": user["id"]},
-                {"$pull": {"attachments": {"id": media_id}}}
-            )
+    # Hard cleanup: remove attachment from all item collections for this user
+    for col in ITEM_COLLECTIONS.values():
+        await col.update_many(
+            {"user_id": user["id"]},
+            {"$pull": {"attachments": {"id": media_id}}}
+        )
 
     if media_doc.get("kind") == "file" and media_doc.get("filename"):
         file_path = UPLOAD_DIR / media_doc["filename"]
