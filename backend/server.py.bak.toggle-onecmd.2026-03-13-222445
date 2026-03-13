@@ -2343,76 +2343,39 @@ async def toggle_media_preview(media_id: str, user: dict = Depends(get_current_u
         {"$set": {"preview_on_card": next_preview, "updated_at": now_iso}},
     )
 
-    impacted = set()
     for li in media_doc.get("linked_items", []):
-        t, i = li.get("item_type"), li.get("item_id")
-        if t in ITEM_COLLECTIONS and i:
-            impacted.add((t, i))
+        item_type = li.get("item_type")
+        item_id = li.get("item_id")
+        col = ITEM_COLLECTIONS.get(item_type)
+        if col is None or not item_id:
+            continue
 
-    for t, col in ITEM_COLLECTIONS.items():
-        docs = await col.find(
-            {"user_id": user["id"], "$or": [{"attachments.id": media_id}, {"attachments.media_id": media_id}]},
-            {"_id": 0, "id": 1},
-        ).to_list(2000)
-        for d in docs:
-            impacted.add((t, d["id"]))
-
-    for item_type, item_id in impacted:
-        col = ITEM_COLLECTIONS[item_type]
-        item_doc = await col.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0, "attachments": 1})
-        old_atts = (item_doc or {}).get("attachments", [])
-        att_ids = set((a.get("media_id") or a.get("id")) for a in old_atts if (a.get("media_id") or a.get("id")))
-
-        medias = await db.media_items.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(5000)
-
-        filtered = []
-        for m in medias:
-            mid = m.get("id")
-            lis = m.get("linked_items") or []
-            linked_here = any(li.get("item_type") == item_type and li.get("item_id") == item_id for li in lis)
-            if linked_here or mid in att_ids:
-                filtered.append(m)
-
-        new_atts = []
-        seen = False
-        for m in filtered:
-            mid = m["id"]
-            if next_preview:
-                pv = (mid == media_id)
-            else:
-                if mid == media_id:
-                    pv = False
-                else:
-                    pv = bool(m.get("preview_on_card", False)) and not seen
-            if pv:
-                seen = True
-
-            await db.media_items.update_one(
-                {"id": mid, "user_id": user["id"]},
-                {"$set": {"preview_on_card": pv, "updated_at": now_iso}},
+        if next_preview:
+            await db.media_items.update_many(
+                {
+                    "user_id": user["id"],
+                    "id": {"$ne": media_id},
+                    "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
+                },
+                {"$set": {"preview_on_card": False, "updated_at": now_iso}},
             )
 
-            new_atts.append({
-                "id": mid,
-                "media_id": mid,
-                "kind": m.get("kind", "file"),
-                "filename": m.get("filename"),
-                "original_name": m.get("original_name") or m.get("title") or m.get("url") or "media",
-                "mime_type": m.get("mime_type") or "application/octet-stream",
-                "size": m.get("size", 0),
-                "url": m.get("url"),
-                "preview_on_card": pv,
-                "uploaded_at": m.get("created_at") or now_iso,
-            })
+        medias = await db.media_items.find(
+            {
+                "user_id": user["id"],
+                "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
+            },
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(2000)
 
+        attachments = [_build_attachment_from_media(m) for m in medias]
         await col.update_one(
             {"id": item_id, "user_id": user["id"]},
-            {"$set": {"attachments": new_atts, "updated_at": now_iso}},
+            {"$set": {"attachments": attachments, "updated_at": now_iso}},
         )
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
     return _serialize_media(saved)
-
 
 @api_router.post("/media/{media_id}/attach")
 async def attach_media(media_id: str, payload: MediaAttachPayload, user: dict = Depends(get_current_user)):
