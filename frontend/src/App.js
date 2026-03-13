@@ -15,6 +15,7 @@ import TagsPage from "./pages/TagsPage";
 import MindmapPage from "./pages/MindmapPage";
 import CalendarPage from "./pages/CalendarPage";
 import HomeAssistantPage from "./pages/HomeAssistantPage";
+import NotesPage from "./pages/NotesPage";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -79,6 +80,7 @@ function App() {
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="content" element={<ContentPage />} />
+            <Route path="notes" element={<NotesPage />} />
             <Route path="portfolio" element={<PortfolioPage />} />
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="tags" element={<TagsPage />} />

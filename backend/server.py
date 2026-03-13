@@ -346,6 +346,67 @@ class ContentResponse(BaseModel):
     created_at: str
     updated_at: str
 
+# Notes Models
+class NoteChecklistItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str
+    done: bool = False
+
+class NoteSheetCreate(BaseModel):
+    name: str
+    color: Optional[str] = None
+
+class NoteSheetUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+class NoteSheetResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    name: str
+    color: Optional[str] = None
+    note_count: int = 0
+    created_at: str
+    updated_at: str
+
+class NoteCreate(BaseModel):
+    sheet_id: str
+    title: str
+    body: Optional[str] = None
+    note_type: str = "note"  # note, checklist
+    checklist: List[NoteChecklistItem] = []
+    tags: List[str] = []
+    pinned: bool = False
+    is_quick: bool = False
+
+class NoteUpdate(BaseModel):
+    sheet_id: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
+    note_type: Optional[str] = None
+    checklist: Optional[List[NoteChecklistItem]] = None
+    tags: Optional[List[str]] = None
+    pinned: Optional[bool] = None
+    is_quick: Optional[bool] = None
+
+class NoteResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    sheet_id: str
+    title: str
+    body: Optional[str] = None
+    note_type: str = "note"
+    checklist: List[Dict[str, Any]] = []
+    tags: List[str] = []
+    pinned: bool = False
+    is_quick: bool = False
+    links: List[Dict[str, Any]] = []
+    attachments: List[Dict[str, Any]] = []
+    created_at: str
+    updated_at: str
+
 # Portfolio Models
 class PortfolioAssetCreate(BaseModel):
     name: str
@@ -1027,6 +1088,201 @@ async def delete_content(content_id: str, user: dict = Depends(get_current_user)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Contenu non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return {"message": "Contenu supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
+
+# ==================== NOTES ROUTES ====================
+
+async def _ensure_note_sheet(user_id: str, sheet_id: str) -> Dict[str, Any]:
+    sheet = await db.note_sheets.find_one({"id": sheet_id, "user_id": user_id}, {"_id": 0})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Feuille non trouvee")
+    return sheet
+
+async def _ensure_default_note_sheet(user_id: str) -> Dict[str, Any]:
+    existing = await db.note_sheets.find_one({"user_id": user_id}, {"_id": 0})
+    if existing:
+        return existing
+
+    now = datetime.now(timezone.utc).isoformat()
+    default_sheet = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "name": "General",
+        "color": "blue",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.note_sheets.insert_one(default_sheet)
+    return default_sheet
+
+@api_router.post("/notes/sheets", response_model=NoteSheetResponse)
+async def create_note_sheet(data: NoteSheetCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "name": data.name.strip(),
+        "color": data.color,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.note_sheets.insert_one(doc)
+    doc["note_count"] = 0
+    return NoteSheetResponse(**doc)
+
+@api_router.get("/notes/sheets", response_model=List[NoteSheetResponse])
+async def get_note_sheets(user: dict = Depends(get_current_user)):
+    await _ensure_default_note_sheet(user["id"])
+    sheets = await db.note_sheets.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    if not sheets:
+        return []
+
+    counts = await db.notes.aggregate([
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {"_id": "$sheet_id", "count": {"$sum": 1}}},
+    ]).to_list(1000)
+    count_map = {c["_id"]: c["count"] for c in counts}
+
+    return [
+        NoteSheetResponse(**{
+            **sheet,
+            "note_count": int(count_map.get(sheet["id"], 0)),
+        })
+        for sheet in sheets
+    ]
+
+@api_router.put("/notes/sheets/{sheet_id}", response_model=NoteSheetResponse)
+async def update_note_sheet(sheet_id: str, data: NoteSheetUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Aucune modification")
+    if "name" in update_data:
+        update_data["name"] = update_data["name"].strip()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    updated = await db.note_sheets.find_one_and_update(
+        {"id": sheet_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Feuille non trouvee")
+    updated.pop("_id", None)
+    updated["note_count"] = await db.notes.count_documents({"user_id": user["id"], "sheet_id": sheet_id})
+    return NoteSheetResponse(**updated)
+
+@api_router.delete("/notes/sheets/{sheet_id}")
+async def delete_note_sheet(sheet_id: str, user: dict = Depends(get_current_user)):
+    sheet = await db.note_sheets.find_one({"id": sheet_id, "user_id": user["id"]}, {"_id": 0})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Feuille non trouvee")
+
+    sheets = await db.note_sheets.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    if len(sheets) <= 1:
+        raise HTTPException(status_code=400, detail="Au moins une feuille est requise")
+
+    replacement = next((s for s in sheets if s["id"] != sheet_id), None)
+    if replacement:
+        await db.notes.update_many(
+            {"user_id": user["id"], "sheet_id": sheet_id},
+            {"$set": {"sheet_id": replacement["id"], "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    await db.note_sheets.delete_one({"id": sheet_id, "user_id": user["id"]})
+    return {"message": "Feuille supprimee"}
+
+@api_router.post("/notes", response_model=NoteResponse)
+async def create_note(data: NoteCreate, user: dict = Depends(get_current_user)):
+    await _ensure_note_sheet(user["id"], data.sheet_id)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "sheet_id": data.sheet_id,
+        "title": data.title,
+        "body": data.body,
+        "note_type": data.note_type,
+        "checklist": [c.model_dump() if hasattr(c, "model_dump") else c for c in data.checklist],
+        "tags": data.tags,
+        "pinned": bool(data.pinned),
+        "is_quick": bool(data.is_quick),
+        "links": [],
+        "attachments": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.notes.insert_one(doc)
+    doc.pop("_id", None)
+    return NoteResponse(**doc)
+
+@api_router.get("/notes", response_model=List[NoteResponse])
+async def get_notes(
+    user: dict = Depends(get_current_user),
+    sheet_id: Optional[str] = None,
+    search: Optional[str] = None,
+    note_type: Optional[str] = None,
+    quick_only: bool = False,
+):
+    query: Dict[str, Any] = {"user_id": user["id"]}
+    if sheet_id:
+        query["sheet_id"] = sheet_id
+    if note_type:
+        query["note_type"] = note_type
+    if quick_only:
+        query["is_quick"] = True
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"body": {"$regex": search, "$options": "i"}},
+            {"tags": {"$elemMatch": {"$regex": search, "$options": "i"}}},
+        ]
+
+    notes = await db.notes.find(query, {"_id": 0}).sort([
+        ("pinned", -1),
+        ("updated_at", -1),
+    ]).to_list(3000)
+    return [NoteResponse(**note) for note in notes]
+
+@api_router.get("/notes/{note_id}", response_model=NoteResponse)
+async def get_note(note_id: str, user: dict = Depends(get_current_user)):
+    note = await db.notes.find_one({"id": note_id, "user_id": user["id"]}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note non trouvee")
+    return NoteResponse(**note)
+
+@api_router.put("/notes/{note_id}", response_model=NoteResponse)
+async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_current_user)):
+    update_data: Dict[str, Any] = {}
+    for k, v in data.model_dump().items():
+        if v is None:
+            continue
+        if k == "checklist":
+            update_data[k] = [c.model_dump() if hasattr(c, "model_dump") else c for c in v]
+        else:
+            update_data[k] = v
+
+    if "sheet_id" in update_data:
+        await _ensure_note_sheet(user["id"], update_data["sheet_id"])
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Aucune modification")
+
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updated = await db.notes.find_one_and_update(
+        {"id": note_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Note non trouvee")
+    updated.pop("_id", None)
+    return NoteResponse(**updated)
+
+@api_router.delete("/notes/{note_id}")
+async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
+    result = await db.notes.delete_one({"id": note_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note non trouvee")
+    return {"message": "Note supprimee"}
 
 # ==================== PORTFOLIO ROUTES ====================
 
@@ -1766,6 +2022,7 @@ ITEM_COLLECTIONS = {
     "inventory": db.inventory,
     "wishlist": db.wishlist,
     "content": db.content,
+    "note": db.notes,
     "portfolio": db.portfolio,
     "portfolio_physical": db.portfolio_v2_physical_assets,
     "project": db.projects,
@@ -2196,7 +2453,7 @@ async def get_all_tags(user: dict = Depends(get_current_user)):
     # Aggregate tags from all collections
     tags = set()
     
-    for collection in [db.inventory, db.wishlist, db.content, db.portfolio, db.tasks, db.projects]:
+    for collection in [db.inventory, db.wishlist, db.content, db.portfolio, db.tasks, db.projects, db.notes]:
         items = await collection.find({"user_id": user_id}, {"tags": 1, "_id": 0}).to_list(1000)
         for item in items:
             tags.update(item.get("tags", []))
@@ -2220,6 +2477,7 @@ async def global_search(
         "projects": [],
         "tasks": [],
         "content": [],
+        "notes": [],
         "portfolio": [],
         "alerts": []
     }
@@ -2265,6 +2523,13 @@ async def global_search(
         {"_id": 0}
     ).limit(10).to_list(10)
     results["content"] = content
+
+    # Search notes
+    notes = await db.notes.find(
+        {"user_id": user_id, "$or": [{"title": search_query}, {"body": search_query}]},
+        {"_id": 0}
+    ).limit(10).to_list(10)
+    results["notes"] = notes
     
     # Search alerts
     alerts = await db.alerts.find(
@@ -3316,6 +3581,11 @@ class MindmapViewStateUpdate(BaseModel):
     positions: Optional[Dict[str, Dict[str, float]]] = None
     viewport: Optional[MindmapViewport] = None
 
+class SidebarPreferencesUpdate(BaseModel):
+    nav_groups: Optional[List[Dict[str, Any]]] = None
+    collapsed_groups: Optional[Dict[str, bool]] = None
+    collapsed: Optional[bool] = None
+
 @api_router.get("/mindmap/view-state")
 async def get_mindmap_view_state(user: dict = Depends(get_current_user)):
     doc = await db.user_preferences.find_one(
@@ -3355,6 +3625,45 @@ async def save_mindmap_view_state(payload: MindmapViewStateUpdate, user: dict = 
         raise HTTPException(status_code=400, detail="Aucune donnee valide a sauvegarder")
 
     set_ops["mindmap_view.updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.user_preferences.update_one(
+        {"user_id": user["id"]},
+        {"$set": set_ops},
+        upsert=True,
+    )
+    return {"ok": True}
+
+@api_router.get("/ui/preferences/sidebar")
+async def get_sidebar_preferences(user: dict = Depends(get_current_user)):
+    doc = await db.user_preferences.find_one(
+        {"user_id": user["id"]},
+        {"_id": 0, "sidebar_layout": 1},
+    )
+    sidebar_layout = (doc or {}).get("sidebar_layout", {})
+    return {
+        "nav_groups": sidebar_layout.get("nav_groups"),
+        "collapsed_groups": sidebar_layout.get("collapsed_groups"),
+        "collapsed": sidebar_layout.get("collapsed"),
+        "updated_at": sidebar_layout.get("updated_at"),
+    }
+
+@api_router.put("/ui/preferences/sidebar")
+async def save_sidebar_preferences(payload: SidebarPreferencesUpdate, user: dict = Depends(get_current_user)):
+    set_ops: Dict[str, Any] = {}
+
+    if payload.nav_groups is not None:
+        set_ops["sidebar_layout.nav_groups"] = payload.nav_groups
+
+    if payload.collapsed_groups is not None:
+        set_ops["sidebar_layout.collapsed_groups"] = payload.collapsed_groups
+
+    if payload.collapsed is not None:
+        set_ops["sidebar_layout.collapsed"] = bool(payload.collapsed)
+
+    if not set_ops:
+        raise HTTPException(status_code=400, detail="Aucune preference valide a sauvegarder")
+
+    set_ops["sidebar_layout.updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.user_preferences.update_one(
         {"user_id": user["id"]},

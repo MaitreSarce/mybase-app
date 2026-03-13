@@ -90,6 +90,20 @@ export const contentApi = {
   delete: (id) => api.delete(`/content/${id}`),
 };
 
+// Notes API
+export const notesApi = {
+  getSheets: () => api.get('/notes/sheets'),
+  createSheet: (data) => api.post('/notes/sheets', data),
+  updateSheet: (id, data) => api.put(`/notes/sheets/${id}`, data),
+  deleteSheet: (id) => api.delete(`/notes/sheets/${id}`),
+
+  getAll: (params) => api.get('/notes', { params }),
+  get: (id) => api.get(`/notes/${id}`),
+  create: (data) => api.post('/notes', data),
+  update: (id, data) => api.put(`/notes/${id}`, data),
+  delete: (id) => api.delete(`/notes/${id}`),
+};
+
 // Portfolio API
 export const portfolioApi = {
   getAll: (params) => api.get('/portfolio', { params }),
@@ -199,6 +213,11 @@ export const mindmapApi = {
   getData: (perspective) => api.get('/mindmap', { params: { perspective } }),
   getViewState: () => api.get('/mindmap/view-state'),
   saveViewState: (data) => api.put('/mindmap/view-state', data),
+};
+
+export const uiPrefsApi = {
+  getSidebar: () => api.get('/ui/preferences/sidebar'),
+  saveSidebar: (data) => api.put('/ui/preferences/sidebar', data),
 };
 
 // Storage API

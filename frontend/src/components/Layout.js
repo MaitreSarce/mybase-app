@@ -1,7 +1,8 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { authApi, mediaApi, storageApi } from '../services/api';
+import { authApi, mediaApi, storageApi, uiPrefsApi } from '../services/api';
 import {
   LayoutDashboard,
   Layers,
@@ -32,6 +33,7 @@ import {
   ArrowDown,
   FolderPlus,
   RotateCcw,
+  StickyNote,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
@@ -63,6 +65,7 @@ const NAV_ITEMS = [
   { id: 'wishlist', path: '/wishlist', label: 'Liste de souhaits', icon: Heart },
   { id: 'projects', path: '/projects', label: 'Projets', icon: FolderKanban },
   { id: 'content', path: '/content', label: 'Contenu', icon: BookOpen },
+  { id: 'notes', path: '/notes', label: 'Notes', icon: StickyNote },
   { id: 'portfolio', path: '/portfolio', label: 'Portefeuille', icon: TrendingUp },
   { id: 'alerts', path: '/alerts', label: 'Alertes', icon: Bell },
   { id: 'tags', path: '/tags', label: 'Tags', icon: Hash },
@@ -160,9 +163,60 @@ const Layout = () => {
     }
   });
   const [newGroupName, setNewGroupName] = useState('');
+  const [sidebarPrefsReady, setSidebarPrefsReady] = useState(false);
 
   const importInputRef = useRef(null);
+  const pendingSidebarPrefsRef = useRef({});
+  const sidebarSaveTimeoutRef = useRef(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadSidebarPreferences = async () => {
+      try {
+        const res = await uiPrefsApi.getSidebar();
+        if (cancelled) return;
+        const data = res?.data || {};
+
+        if (Array.isArray(data.nav_groups)) {
+          const nextGroups = sanitizeNavGroups(data.nav_groups);
+          setNavGroups(nextGroups);
+          localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(nextGroups));
+        }
+        if (data.collapsed_groups && typeof data.collapsed_groups === 'object') {
+          setCollapsedGroups(data.collapsed_groups);
+          localStorage.setItem(NAV_COLLAPSE_KEY, JSON.stringify(data.collapsed_groups));
+        }
+        if (typeof data.collapsed === 'boolean') {
+          setCollapsed(data.collapsed);
+        }
+      } catch {
+        // Keep local fallback only if API preferences are unavailable.
+      } finally {
+        if (!cancelled) setSidebarPrefsReady(true);
+      }
+    };
+    loadSidebarPreferences();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => () => {
+    if (sidebarSaveTimeoutRef.current) clearTimeout(sidebarSaveTimeoutRef.current);
+  }, []);
+
+  const queueSidebarSave = useCallback((partial) => {
+    if (!sidebarPrefsReady) return;
+    pendingSidebarPrefsRef.current = { ...pendingSidebarPrefsRef.current, ...partial };
+    if (sidebarSaveTimeoutRef.current) clearTimeout(sidebarSaveTimeoutRef.current);
+    sidebarSaveTimeoutRef.current = setTimeout(async () => {
+      const payload = pendingSidebarPrefsRef.current;
+      pendingSidebarPrefsRef.current = {};
+      try {
+        await uiPrefsApi.saveSidebar(payload);
+      } catch {
+        // Keep local fallback only if remote save fails.
+      }
+    }, 400);
+  }, [sidebarPrefsReady]);
 
   useEffect(() => {
     try {
@@ -170,7 +224,8 @@ const Layout = () => {
     } catch {
       // ignore localStorage failures (private mode/quota)
     }
-  }, [navGroups]);
+    queueSidebarSave({ nav_groups: navGroups });
+  }, [navGroups, queueSidebarSave]);
 
   useEffect(() => {
     try {
@@ -178,7 +233,12 @@ const Layout = () => {
     } catch {
       // ignore localStorage failures (private mode/quota)
     }
-  }, [collapsedGroups]);
+    queueSidebarSave({ collapsed_groups: collapsedGroups });
+  }, [collapsedGroups, queueSidebarSave]);
+
+  useEffect(() => {
+    queueSidebarSave({ collapsed });
+  }, [collapsed, queueSidebarSave]);
 
   const findItemGroupContext = (itemId, groups = navGroups) => {
     for (let gIndex = 0; gIndex < groups.length; gIndex += 1) {
