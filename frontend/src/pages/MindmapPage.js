@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { mindmapApi, tagsApi, linksApi } from '../services/api';
 import { toast } from 'sonner';
 import {
@@ -13,7 +13,7 @@ import {
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
-import { RefreshCw, Loader2, Network, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { RefreshCw, Loader2, Network, X, ChevronUp, ChevronDown, Undo2 } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 
 const TYPE_LABELS = {
@@ -65,6 +65,9 @@ const CustomNode = ({ data }) => (
 );
 
 const nodeTypes = { custom: CustomNode };
+const MINDMAP_POSITIONS_KEY = 'mybase:mindmap:positions:v1';
+const MINDMAP_VIEWPORT_KEY = 'mybase:mindmap:viewport:v1';
+const MAX_UNDO_STEPS = 20;
 
 const MindmapPage = () => {
   const [loading, setLoading] = useState(true);
@@ -78,6 +81,12 @@ const MindmapPage = () => {
   const [focusedNodeId, setFocusedNodeId] = useState(null);
   const [layoutMode, setLayoutMode] = useState('tree');
   const [hierarchyOrder, setHierarchyOrder] = useState(HIERARCHY_PRESETS.projects_first.order);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [defaultViewport, setDefaultViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [hasSavedViewport, setHasSavedViewport] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
+  const savedPositionsRef = useRef({});
+  const dragStartSnapshotRef = useRef(null);
 
   const nodeTypeMap = useMemo(() => {
     const map = {};
@@ -122,6 +131,34 @@ const MindmapPage = () => {
 
   
 
+  useEffect(() => {
+    try {
+      const savedPositions = window.localStorage.getItem(MINDMAP_POSITIONS_KEY);
+      if (savedPositions) {
+        const parsed = JSON.parse(savedPositions);
+        if (parsed && typeof parsed === 'object') savedPositionsRef.current = parsed;
+      }
+
+      const savedViewport = window.localStorage.getItem(MINDMAP_VIEWPORT_KEY);
+      if (savedViewport) {
+        const parsed = JSON.parse(savedViewport);
+        if (parsed && typeof parsed === 'object') {
+          const x = Number(parsed.x);
+          const y = Number(parsed.y);
+          const zoom = Number(parsed.zoom);
+          if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom)) {
+            setDefaultViewport({ x, y, zoom });
+            setHasSavedViewport(true);
+          }
+        }
+      }
+    } catch {
+      // Ignore localStorage issues.
+    } finally {
+      setLayoutReady(true);
+    }
+  }, []);
+
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const connectedNodeIds = useMemo(() => {
@@ -157,6 +194,7 @@ const MindmapPage = () => {
   }, [focusedNodeId, rawData.edges]);
 
     useEffect(() => {
+    if (!layoutReady) return;
     if (!rawData.nodes.length) { setNodes([]); setEdges([]); return; }
 
     let filteredNodes = rawData.nodes;
@@ -213,7 +251,7 @@ const MindmapPage = () => {
           flowNodes.push({
             id: n.id,
             type: 'custom',
-            position: { x: 80 + (level * 360), y: 60 + (idx * 110) },
+            position: savedPositionsRef.current[n.id] || { x: 80 + (level * 360), y: 60 + (idx * 110) },
             data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
           });
         });
@@ -230,7 +268,7 @@ const MindmapPage = () => {
         return {
           id: n.id,
           type: 'custom',
-          position: { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) },
+          position: savedPositionsRef.current[n.id] || { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) },
           data: { label: n.name, color: n.color || TYPE_COLORS[n.type] || '#888', itemType: n.type, dimmed },
         };
       });
@@ -247,10 +285,54 @@ const MindmapPage = () => {
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [rawData, filterTypes, filterTags, connectedNodeIds, layoutMode, hierarchyOrder, setNodes, setEdges]);
+  }, [layoutReady, rawData, filterTypes, filterTags, connectedNodeIds, layoutMode, hierarchyOrder, setNodes, setEdges]);
+  useEffect(() => {
+    if (!nodes.length) return;
+    const next = { ...savedPositionsRef.current };
+    nodes.forEach((n) => { next[n.id] = n.position; });
+    savedPositionsRef.current = next;
+    try {
+      window.localStorage.setItem(MINDMAP_POSITIONS_KEY, JSON.stringify(next));
+    } catch {
+      // Ignore localStorage issues.
+    }
+  }, [nodes]);
+
 
   const handleNodeClick = useCallback((_, node) => {
     setFocusedNodeId(prev => prev === node.id ? null : node.id);
+  }, []);
+
+  const handleNodeDragStart = useCallback(() => {
+    dragStartSnapshotRef.current = Object.fromEntries(nodes.map((n) => [n.id, { ...n.position }]));
+  }, [nodes]);
+
+  const handleNodeDragStop = useCallback((_, node) => {
+    const snapshot = dragStartSnapshotRef.current;
+    dragStartSnapshotRef.current = null;
+    if (!snapshot) return;
+    const before = snapshot[node.id];
+    if (!before) return;
+    if (before.x === node.position.x && before.y === node.position.y) return;
+    setUndoStack((prev) => [...prev.slice(-(MAX_UNDO_STEPS - 1)), snapshot]);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const snapshot = prev[prev.length - 1];
+      setNodes((curr) => curr.map((n) => (snapshot[n.id] ? { ...n, position: snapshot[n.id] } : n)));
+      return prev.slice(0, -1);
+    });
+  }, [setNodes]);
+
+  const handleMoveEnd = useCallback((_, viewport) => {
+    if (!viewport) return;
+    try {
+      window.localStorage.setItem(MINDMAP_VIEWPORT_KEY, JSON.stringify(viewport));
+    } catch {
+      // Ignore localStorage issues.
+    }
   }, []);
 
   const handleRefresh = () => { setRefreshing(true); fetchData(); };
@@ -309,7 +391,9 @@ const MindmapPage = () => {
           </div>
           <MultiSelect options={typeOpts} selected={filterTypes} onChange={setFilterTypes} placeholder="Sections" testId="mindmap-filter-types" />
           {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="mindmap-filter-tags" />}
-          <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="mindmap-refresh-btn">
+          <Button variant="outline" onClick={handleUndo} disabled={undoStack.length === 0} data-testid="mindmap-undo-btn" title="Annuler le dernier deplacement">
+            <Undo2 className="h-4 w-4" />
+          </Button>          <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="mindmap-refresh-btn">
             {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
         </div>
@@ -344,7 +428,11 @@ const MindmapPage = () => {
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
             onConnect={handleConnect} onEdgesDelete={handleEdgesDelete}
             onNodeClick={handleNodeClick}
-            nodeTypes={nodeTypes} fitView minZoom={0.1} maxZoom={2}
+            onNodeDragStart={handleNodeDragStart}
+            onNodeDragStop={handleNodeDragStop}
+            onMoveEnd={handleMoveEnd}
+            defaultViewport={defaultViewport}
+            nodeTypes={nodeTypes} fitView={!hasSavedViewport} minZoom={0.1} maxZoom={2}
             proOptions={{ hideAttribution: true }}
             connectionLineStyle={{ stroke: '#888', strokeWidth: 2 }}
           >
@@ -363,6 +451,8 @@ const MindmapPage = () => {
 };
 
 export default MindmapPage;
+
+
 
 
 
