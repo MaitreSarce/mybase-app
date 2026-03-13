@@ -340,9 +340,9 @@ const MindmapPage = () => {
     const flowEdges = rawData.edges
       .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
       .map((e, i) => ({
-        id: `e-${i}`, source: e.source, target: e.target, label: e.label || '',
+        id: `e-${i}`, source: e.source, target: e.target,
         style: { stroke: connectedNodeIds && (!connectedNodeIds.has(e.source) || !connectedNodeIds.has(e.target)) ? '#333' : '#666', strokeWidth: 1.5 },
-        labelStyle: { fill: '#aaa', fontSize: 10 }, animated: false,
+        animated: false,
       }));
 
     setNodes(flowNodes);

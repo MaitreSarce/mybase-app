@@ -1,0 +1,119 @@
+[
+  {
+    "id": "77db2006-5b2d-4ba7-9c35-417ac90f2a0d",
+    "user_id": "a0520235-11c9-4ca5-a4d2-2a3537d2446e",
+    "name": "Montres",
+    "description": "",
+    "category": "",
+    "color": "blue",
+    "icon": "watch",
+    "metadata_schema": [],
+    "item_count": 1,
+    "created_at": "2026-02-27T21:06:52.680103+00:00",
+    "updated_at": "2026-02-27T21:06:52.680103+00:00"
+  },
+  {
+    "id": "a7ed6775-9459-4ea0-a6c1-fab05afd65ba",
+    "user_id": "a0520235-11c9-4ca5-a4d2-2a3537d2446e",
+    "name": "Lego",
+    "description": "",
+    "category": "",
+    "color": "amber",
+    "icon": "lego",
+    "metadata_schema": [],
+    "item_count": 1,
+    "created_at": "2026-02-27T21:10:30.122456+00:00",
+    "updated_at": "2026-02-27T21:10:30.122456+00:00"
+  },
+  {
+    "id": "6ee6f68e-d59b-4235-a1b5-dab5bd95f021",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "name": "Lego",
+    "description": "",
+    "category": "",
+    "color": "blue",
+    "icon": null,
+    "metadata_schema": [],
+    "item_count": 0,
+    "created_at": "2026-03-05T18:19:30.859842+00:00",
+    "updated_at": "2026-03-05T18:19:30.859842+00:00"
+  },
+  {
+    "id": "b3c840d0-9958-4a77-bb00-a82009ef6b8b",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "name": "Montres",
+    "description": "",
+    "category": "",
+    "color": "violet",
+    "icon": null,
+    "metadata_schema": [],
+    "item_count": 1,
+    "created_at": "2026-02-28T10:48:47.418870+00:00",
+    "updated_at": "2026-03-13T19:53:36.139471+00:00",
+    "links": [
+      {
+        "item_id": "d2491a41-cf8b-4b95-a85b-9e1699fffded",
+        "item_type": "wishlist",
+        "item_name": "Farer thorne gold(World Timer)",
+        "label": null,
+        "created_at": "2026-02-28T10:53:42.110007+00:00"
+      },
+      {
+        "item_id": "cbaa1c75-e04b-4468-bff2-9da7e1ae4356",
+        "item_type": "wishlist",
+        "item_name": "Serica Réf. 8315-1",
+        "label": null,
+        "created_at": "2026-03-03T14:52:56.508115+00:00"
+      },
+      {
+        "item_id": "bbef1508-c04d-4a4a-86d4-2a78da772e21",
+        "item_type": "wishlist",
+        "item_name": "Hamilton Khaki Field",
+        "label": null,
+        "created_at": "2026-03-03T14:53:26.284441+00:00"
+      },
+      {
+        "item_id": "b853e248-57c0-4bcc-8bc7-d21983a86f5d",
+        "item_type": "wishlist",
+        "item_name": "Bulova Pirater la montre",
+        "label": null,
+        "created_at": "2026-03-03T14:53:40.297507+00:00"
+      },
+      {
+        "item_id": "06916f77-d651-4028-95ac-714df11243ac",
+        "item_type": "wishlist",
+        "item_name": "Baltic Hermétique tourer",
+        "label": null,
+        "created_at": "2026-03-03T14:55:38.144823+00:00"
+      },
+      {
+        "item_id": "00ec234a-6a58-41ad-901c-1d779b29e3df",
+        "item_type": "wishlist",
+        "item_name": "Longine Flagship Héritage",
+        "label": null,
+        "created_at": "2026-03-03T15:03:49.641475+00:00"
+      },
+      {
+        "item_id": "c2ff5316-cd7b-44f3-b161-24b88a670fab",
+        "item_type": "wishlist",
+        "item_name": "Orient Bambino 38mm - Édition limitée Peanuts",
+        "label": null,
+        "created_at": "2026-03-03T15:06:39.075503+00:00"
+      },
+      {
+        "item_id": "437f4772-7e6a-4bcf-9858-231e24431234",
+        "item_type": "content",
+        "item_name": "Marques Boites Montres",
+        "label": null,
+        "created_at": "2026-03-03T15:12:25.874410+00:00"
+      },
+      {
+        "item_id": "b905fbf6-e83f-4573-aa14-413b62702cc5",
+        "item_type": "content",
+        "item_name": "Marques Montres",
+        "label": null,
+        "created_at": "2026-03-13T19:53:36.139471+00:00"
+      }
+    ]
+  }
+]

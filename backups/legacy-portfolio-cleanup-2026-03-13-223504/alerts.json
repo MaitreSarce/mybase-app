@@ -1,0 +1,16 @@
+[
+  {
+    "id": "8976305e-3595-41c1-afb4-ae470504c390",
+    "user_id": "a0520235-11c9-4ca5-a4d2-2a3537d2446e",
+    "item_type": "wishlist",
+    "item_id": "387126b7-4e23-46bd-9c71-ac35d869ced7",
+    "item_name": "Fusée SLS NASA Artemis (42221)",
+    "alert_type": "price_change_down",
+    "target_value": 15.0,
+    "is_percentage": true,
+    "current_value": 60.0,
+    "triggered": false,
+    "triggered_at": null,
+    "created_at": "2026-02-27T22:15:51.347294+00:00"
+  }
+]

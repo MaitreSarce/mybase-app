@@ -1,0 +1,72 @@
+[
+  {
+    "id": "c8581bb5-8454-4986-bf98-b3bc52d151e5",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "title": "Sites/Marques Appart (meuble, quincaillerie etc)",
+    "content_type": "encyclopédie",
+    "description": "",
+    "body": "- Meuble, quincaillerie, poignée, interrupteur : https://www.remygarnier.fr/",
+    "url": "",
+    "tags": [
+      "Appart"
+    ],
+    "metadata": [],
+    "links": [],
+    "attachments": [],
+    "category": "",
+    "created_at": "2026-03-05T17:15:22.021621+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "b905fbf6-e83f-4573-aa14-413b62702cc5",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "title": "Marques Montres",
+    "content_type": "encyclopédie",
+    "description": "",
+    "body": "",
+    "url": "",
+    "tags": [
+      "Montre"
+    ],
+    "metadata": [],
+    "links": [
+      {
+        "item_id": "b3c840d0-9958-4a77-bb00-a82009ef6b8b",
+        "item_type": "collection",
+        "item_name": "Montres",
+        "label": null,
+        "created_at": "2026-03-13T19:53:36.139471+00:00"
+      }
+    ],
+    "attachments": [],
+    "category": "",
+    "created_at": "2026-03-03T15:13:03.477546+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "437f4772-7e6a-4bcf-9858-231e24431234",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "title": "Marques Boites Montres",
+    "content_type": "encyclopédie",
+    "description": "",
+    "body": "- Scadola del Tempo : Italien - Cher \n- Molequin : Français ? - Cher\n- Le Tanneur : Français - Bon rapport Qualité/prix\n- Lucrin : Pays ? - Cher\n\n",
+    "url": "",
+    "tags": [
+      "Montre"
+    ],
+    "metadata": [],
+    "links": [
+      {
+        "item_id": "b3c840d0-9958-4a77-bb00-a82009ef6b8b",
+        "item_type": "collection",
+        "item_name": "Montres",
+        "label": null,
+        "created_at": "2026-03-03T15:12:25.874410+00:00"
+      }
+    ],
+    "attachments": [],
+    "category": "",
+    "created_at": "2026-03-03T15:08:05.142169+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  }
+]

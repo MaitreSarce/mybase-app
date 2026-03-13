@@ -1,0 +1,178 @@
+[
+  {
+    "id": "616a9924-20de-4e7a-86d3-a436150a431b",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "file",
+    "title": "RA-AC0M17G.png",
+    "filename": "616a9924-20de-4e7a-86d3-a436150a431b.png",
+    "original_name": "RA-AC0M17G.png",
+    "mime_type": "image/png",
+    "size": 3278518,
+    "storage_path": "/mnt/mybase-ssd/MyBase-app/Media/616a9924-20de-4e7a-86d3-a436150a431b.png",
+    "url": null,
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "c2ff5316-cd7b-44f3-b161-24b88a670fab"
+      }
+    ],
+    "created_at": "2026-03-13T21:14:47.842840+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "3c7c13a2-6b92-48df-9624-6e28615d3a3c",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Serica Réf. 8315-1",
+    "filename": null,
+    "original_name": "Serica Réf. 8315-1",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://serica-watches.com/cdn/shop/files/8315-1-9h-expediton-packshot_web_01.jpg?v=1765287424&width=3000",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "cbaa1c75-e04b-4468-bff2-9da7e1ae4356"
+      }
+    ],
+    "created_at": "2026-03-13T20:09:20.048924+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "52fa3cb1-e3a4-4dfb-a7f0-a6c342241431",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Farer thorne gold(World Timer)",
+    "filename": null,
+    "original_name": "Farer thorne gold(World Timer)",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://eur.farer.com/cdn/shop/files/RED-GOLD-MSTV-marroon_1728x.png?v=1770234484",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "d2491a41-cf8b-4b95-a85b-9e1699fffded"
+      }
+    ],
+    "created_at": "2026-03-13T20:08:00.669613+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "7070dfb7-19c9-4d0b-9299-8eabbe26bcf8",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Hamilton Khaki Field",
+    "filename": null,
+    "original_name": "Hamilton Khaki Field",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://www.hamiltonwatch.com/media/catalog/product/cache/bc54b7224dad07746d99daf20f84bdcc/h/6/h69439931.png",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "bbef1508-c04d-4a4a-86d4-2a78da772e21"
+      }
+    ],
+    "created_at": "2026-03-13T20:10:31.306080+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "b56529b4-973e-46f9-8bd5-990d0d8c00f3",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Baltic Hermétique tourer",
+    "filename": null,
+    "original_name": "Baltic Hermétique tourer",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://cdn.shopify.com/s/files/1/0012/9299/2583/files/hermetique-bronze-brown-face-tropic-fkm-brown.png?v=1732634470&width=2000",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "06916f77-d651-4028-95ac-714df11243ac"
+      }
+    ],
+    "created_at": "2026-03-13T20:11:33.464173+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  },
+  {
+    "id": "1eb46f55-f87b-4205-883a-f6ab58a45437",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Longine Flagship Héritage",
+    "filename": null,
+    "original_name": "Longine Flagship Héritage",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://api.ecom.longines.com/media/catalog/product/w/a/watch-collection-flagship-heritage-l4-795-4-78-2-bd9fe6-hero.png?w=1080",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "00ec234a-6a58-41ad-901c-1d779b29e3df"
+      }
+    ],
+    "created_at": "2026-03-13T20:13:14.025410+00:00",
+    "updated_at": "2026-03-13T21:23:32.956267+00:00"
+  },
+  {
+    "id": "3fac103c-83b9-4d91-8d23-219339792777",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Rolex DateJust Silver",
+    "filename": null,
+    "original_name": "Rolex DateJust Silver",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://img.valueyourwatch.com/wp-content/uploads/2023/05/25112452/s-l1600-83.jpg?strip=all&sharp=1",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "inventory",
+        "item_id": "a2089324-0ef9-4694-8e0e-406e75e07403"
+      }
+    ],
+    "created_at": "2026-03-13T21:25:26.580121+00:00",
+    "updated_at": "2026-03-13T21:27:13.480832+00:00"
+  },
+  {
+    "id": "3728f042-5b2b-49a0-a482-bfaa46418f17",
+    "user_id": "aa8eab55-f8ba-431a-8aaa-20f537650d5a",
+    "kind": "link",
+    "title": "Bulova Pirater la montre",
+    "filename": null,
+    "original_name": "Bulova Pirater la montre",
+    "mime_type": "text/uri-list",
+    "size": 0,
+    "storage_path": null,
+    "url": "https://citizenwatch.widen.net/content/spkarh9osm/jpeg/Hack+Watch.jpeg?u=41zuoe&width=1600&height=2000&quality=80&crop=false&keep=c&color=F9F8F6",
+    "preview_on_card": true,
+    "is_floating": false,
+    "linked_items": [
+      {
+        "item_type": "wishlist",
+        "item_id": "b853e248-57c0-4bcc-8bc7-d21983a86f5d"
+      }
+    ],
+    "created_at": "2026-03-13T20:08:44.832031+00:00",
+    "updated_at": "2026-03-13T21:17:38.955432+00:00"
+  }
+]
