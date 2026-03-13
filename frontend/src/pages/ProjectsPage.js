@@ -25,7 +25,7 @@ import {
 } from '../components/ui/table';
 import {
   Plus, MoreVertical, Pencil, Trash2, FolderKanban, Loader2,
-  CheckCircle2, Circle, Calendar, CornerDownRight, Search, X, FileText,
+  CheckCircle2, Circle, Calendar, CornerDownRight, Search, X, FileText, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import ItemLinksManager from '../components/ItemLinksManager';
 import FileUploader from '../components/FileUploader';
@@ -66,6 +66,7 @@ const ProjectsPage = () => {
   const [activeTab, setActiveTab] = useState('projects');
   const [newTaskTag, setNewTaskTag] = useState('');
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
+  const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
   const dropdownActionRef = useRef(false);
 
   const [projectForm, setProjectForm] = useState({
@@ -330,6 +331,24 @@ const ProjectsPage = () => {
     if (row.kind === 'project') return visibleHierarchyProjectIds.has(row.project.id);
     return selectedHierarchyProjectIds.has(row.task.project_id);
   });
+  const projectById = Object.fromEntries(projects.map((p) => [p.id, p]));
+  const hasCollapsedAncestor = (projectId) => {
+    let current = projectById[projectId];
+    while (current?.parent_id) {
+      if (collapsedHierarchyProjects[current.parent_id]) return true;
+      current = projectById[current.parent_id];
+    }
+    return false;
+  };
+  const hierarchyRowsWithCollapse = filteredHierarchyRows.filter((row) => {
+    if (row.kind === 'project') {
+      return !hasCollapsedAncestor(row.project.id);
+    }
+    return !collapsedHierarchyProjects[row.task.project_id] && !hasCollapsedAncestor(row.task.project_id);
+  });
+  const toggleHierarchyProject = (projectId) => {
+    setCollapsedHierarchyProjects((prev) => ({ ...prev, [projectId]: !prev[projectId] }));
+  };
   const ProjectCard = ({ project, depth = 0 }) => {
     const children = getChildren(project.id);
     const aggregateStats = getProjectAggregateStats(project.id);
@@ -640,16 +659,35 @@ const ProjectsPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredHierarchyRows.map((row, index) => {
+                  {hierarchyRowsWithCollapse.map((row, index) => {
                     const indent = row.depth * 18;
 
                     if (row.kind === 'project') {
                       const project = row.project;
                       const aggregateStats = getProjectAggregateStats(project.id);
+                      const hasChildren = getChildren(project.id).length > 0;
+                      const isCollapsed = !!collapsedHierarchyProjects[project.id];
                       return (
                         <TableRow key={`h-project-${project.id}-${index}`} className="hover:bg-secondary/20">
                           <TableCell>
                             <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
+                              {hasChildren ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleHierarchyProject(project.id);
+                                  }}
+                                  title={isCollapsed ? 'Développer' : 'Réduire'}
+                                >
+                                  {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                </Button>
+                              ) : (
+                                <span className="h-6 w-6" />
+                              )}
                               <FolderKanban className="h-4 w-4 text-muted-foreground" />
                               <span className="font-medium">{project.name}</span>
                             </div>
