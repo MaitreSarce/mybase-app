@@ -197,6 +197,8 @@ export const collectionItemsApi = {
 // Mindmap API
 export const mindmapApi = {
   getData: (perspective) => api.get('/mindmap', { params: { perspective } }),
+  getViewState: () => api.get('/mindmap/view-state'),
+  saveViewState: (data) => api.put('/mindmap/view-state', data),
 };
 
 // Storage API

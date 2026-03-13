@@ -3307,6 +3307,62 @@ async def delete_managed_tag(tag_id: str, user: dict = Depends(get_current_user)
 
 # ==================== MINDMAP DATA ====================
 
+class MindmapViewport(BaseModel):
+    x: float = 0
+    y: float = 0
+    zoom: float = 1
+
+class MindmapViewStateUpdate(BaseModel):
+    positions: Optional[Dict[str, Dict[str, float]]] = None
+    viewport: Optional[MindmapViewport] = None
+
+@api_router.get("/mindmap/view-state")
+async def get_mindmap_view_state(user: dict = Depends(get_current_user)):
+    doc = await db.user_preferences.find_one(
+        {"user_id": user["id"]},
+        {"_id": 0, "mindmap_view": 1},
+    )
+    mindmap_view = (doc or {}).get("mindmap_view", {})
+    return {
+        "positions": mindmap_view.get("positions", {}),
+        "viewport": mindmap_view.get("viewport", {"x": 0, "y": 0, "zoom": 1}),
+        "updated_at": mindmap_view.get("updated_at"),
+    }
+
+@api_router.put("/mindmap/view-state")
+async def save_mindmap_view_state(payload: MindmapViewStateUpdate, user: dict = Depends(get_current_user)):
+    set_ops: Dict[str, Any] = {}
+
+    if payload.positions is not None:
+        clean_positions: Dict[str, Dict[str, float]] = {}
+        for node_id, pos in payload.positions.items():
+            if not isinstance(node_id, str):
+                continue
+            x = pos.get("x")
+            y = pos.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                clean_positions[node_id] = {"x": float(x), "y": float(y)}
+        set_ops["mindmap_view.positions"] = clean_positions
+
+    if payload.viewport is not None:
+        set_ops["mindmap_view.viewport"] = {
+            "x": float(payload.viewport.x),
+            "y": float(payload.viewport.y),
+            "zoom": float(payload.viewport.zoom),
+        }
+
+    if not set_ops:
+        raise HTTPException(status_code=400, detail="Aucune donnee valide a sauvegarder")
+
+    set_ops["mindmap_view.updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.user_preferences.update_one(
+        {"user_id": user["id"]},
+        {"$set": set_ops},
+        upsert=True,
+    )
+    return {"ok": True}
+
 @api_router.get("/mindmap")
 async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: Optional[str] = None):
     """Get all items with their links for mindmap visualization"""

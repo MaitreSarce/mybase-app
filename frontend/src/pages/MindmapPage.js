@@ -87,6 +87,8 @@ const MindmapPage = () => {
   const [undoStack, setUndoStack] = useState([]);
   const savedPositionsRef = useRef({});
   const dragStartSnapshotRef = useRef(null);
+  const pendingSaveRef = useRef({});
+  const saveTimeoutRef = useRef(null);
 
   const nodeTypeMap = useMemo(() => {
     const map = {};
@@ -129,34 +131,94 @@ const MindmapPage = () => {
     fetchData();
   }, [nodeTypeMap, fetchData]);
 
+  const queueSaveViewState = useCallback((partial) => {
+    pendingSaveRef.current = { ...pendingSaveRef.current, ...partial };
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      const payload = pendingSaveRef.current;
+      pendingSaveRef.current = {};
+      try {
+        await mindmapApi.saveViewState(payload);
+      } catch {
+        // Keep local fallback only if remote save fails.
+      }
+    }, 400);
+  }, []);
+
   
 
   useEffect(() => {
-    try {
-      const savedPositions = window.localStorage.getItem(MINDMAP_POSITIONS_KEY);
-      if (savedPositions) {
-        const parsed = JSON.parse(savedPositions);
-        if (parsed && typeof parsed === 'object') savedPositionsRef.current = parsed;
-      }
+    let cancelled = false;
+    const loadViewState = async () => {
+      try {
+        const response = await mindmapApi.getViewState();
+        if (cancelled) return;
+        const remotePositions = response?.data?.positions;
+        const remoteViewport = response?.data?.viewport;
 
-      const savedViewport = window.localStorage.getItem(MINDMAP_VIEWPORT_KEY);
-      if (savedViewport) {
-        const parsed = JSON.parse(savedViewport);
-        if (parsed && typeof parsed === 'object') {
-          const x = Number(parsed.x);
-          const y = Number(parsed.y);
-          const zoom = Number(parsed.zoom);
-          if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom)) {
-            setDefaultViewport({ x, y, zoom });
-            setHasSavedViewport(true);
+        if (remotePositions && typeof remotePositions === 'object') {
+          savedPositionsRef.current = remotePositions;
+          window.localStorage.setItem(MINDMAP_POSITIONS_KEY, JSON.stringify(remotePositions));
+        } else {
+          const savedPositions = window.localStorage.getItem(MINDMAP_POSITIONS_KEY);
+          if (savedPositions) {
+            const parsed = JSON.parse(savedPositions);
+            if (parsed && typeof parsed === 'object') savedPositionsRef.current = parsed;
           }
         }
+
+        const x = Number(remoteViewport?.x);
+        const y = Number(remoteViewport?.y);
+        const zoom = Number(remoteViewport?.zoom);
+        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom)) {
+          setDefaultViewport({ x, y, zoom });
+          setHasSavedViewport(true);
+          window.localStorage.setItem(MINDMAP_VIEWPORT_KEY, JSON.stringify({ x, y, zoom }));
+        } else {
+          const savedViewport = window.localStorage.getItem(MINDMAP_VIEWPORT_KEY);
+          if (savedViewport) {
+            const parsed = JSON.parse(savedViewport);
+            const localX = Number(parsed?.x);
+            const localY = Number(parsed?.y);
+            const localZoom = Number(parsed?.zoom);
+            if (Number.isFinite(localX) && Number.isFinite(localY) && Number.isFinite(localZoom)) {
+              setDefaultViewport({ x: localX, y: localY, zoom: localZoom });
+              setHasSavedViewport(true);
+            }
+          }
+        }
+      } catch {
+        // Fallback to local storage if remote preferences are unavailable.
+        try {
+          const savedPositions = window.localStorage.getItem(MINDMAP_POSITIONS_KEY);
+          if (savedPositions) {
+            const parsed = JSON.parse(savedPositions);
+            if (parsed && typeof parsed === 'object') savedPositionsRef.current = parsed;
+          }
+          const savedViewport = window.localStorage.getItem(MINDMAP_VIEWPORT_KEY);
+          if (savedViewport) {
+            const parsed = JSON.parse(savedViewport);
+            const x = Number(parsed?.x);
+            const y = Number(parsed?.y);
+            const zoom = Number(parsed?.zoom);
+            if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(zoom)) {
+              setDefaultViewport({ x, y, zoom });
+              setHasSavedViewport(true);
+            }
+          }
+        } catch {
+          // Ignore local fallback errors.
+        }
+      } finally {
+        if (!cancelled) setLayoutReady(true);
       }
-    } catch {
-      // Ignore localStorage issues.
-    } finally {
-      setLayoutReady(true);
-    }
+    };
+    loadViewState();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -296,7 +358,8 @@ const MindmapPage = () => {
     } catch {
       // Ignore localStorage issues.
     }
-  }, [nodes]);
+    queueSaveViewState({ positions: next });
+  }, [nodes, queueSaveViewState]);
 
 
   const handleNodeClick = useCallback((_, node) => {
@@ -333,7 +396,8 @@ const MindmapPage = () => {
     } catch {
       // Ignore localStorage issues.
     }
-  }, []);
+    queueSaveViewState({ viewport });
+  }, [queueSaveViewState]);
 
   const handleRefresh = () => { setRefreshing(true); fetchData(); };
 
