@@ -174,6 +174,11 @@ const ProjectsPage = () => {
     } catch { toast.error('Erreur lors de la suppression'); }
   };
 
+  const markDropdownAction = () => {
+    dropdownActionRef.current = true;
+    setTimeout(() => { dropdownActionRef.current = false; }, 250);
+  };
+
   const handleToggleTask = async (task) => {
     try {
       await tasksApi.update(task.id, { completed: !task.completed });
@@ -256,16 +261,23 @@ const ProjectsPage = () => {
 
   const tagNames = allTags.map(t => t.name);
   const tagOpts = tagNames.map(t => ({ value: t, label: t }));
-  const projectFilterOpts = projects.map((project) => {
-    let depth = 0;
-    let current = project;
-    while (current?.parent_id) {
-      depth += 1;
-      current = projects.find(p => p.id === current.parent_id);
-      if (!current) break;
-    }
-    return { value: project.id, label: `${'· '.repeat(depth)}${project.name}` };
-  });
+  const buildProjectFilterOptions = (parentId = null, seen = new Set()) => {
+    const branch = projects
+      .filter((p) => (parentId ? p.parent_id === parentId : !p.parent_id))
+      .map((project) => {
+        if (seen.has(project.id)) return null;
+        const nextSeen = new Set(seen);
+        nextSeen.add(project.id);
+        return {
+          value: project.id,
+          label: project.name,
+          children: buildProjectFilterOptions(project.id, nextSeen),
+        };
+      })
+      .filter(Boolean);
+    return branch;
+  };
+  const projectFilterOpts = buildProjectFilterOptions();
 
   const handleProjectClick = (projectId) => {
     setSelectedProjects([projectId]);
@@ -345,16 +357,16 @@ const ProjectsPage = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                <DropdownMenuItem onSelect={() => handleOpenTaskDialog(null, project.id)}>
+                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenTaskDialog(null, project.id); }}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleOpenProjectDialog(null, project.id)}>
+                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenProjectDialog(null, project.id); }}>
                   <Plus className="h-4 w-4 mr-2" />Ajouter un sous-projet
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleOpenProjectDialog(project)}>
+                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenProjectDialog(project); }}>
                   <Pencil className="h-4 w-4 mr-2" />Modifier
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => handleDeleteProject(project)} className="text-destructive">
+                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleDeleteProject(project); }} className="text-destructive">
                   <Trash2 className="h-4 w-4 mr-2" />Supprimer
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -461,6 +473,7 @@ const ProjectsPage = () => {
           onChange={setHierarchyFilterProjects}
           placeholder="Projets"
           testId="hierarchy-filter-project"
+          hierarchical
         />
       </div>
 
@@ -505,6 +518,7 @@ const ProjectsPage = () => {
               onChange={setSelectedProjects}
               placeholder="Projets (multi)"
               testId="tasks-filter-project"
+              hierarchical
             />
             {selectedProjects.length > 0 && (
               <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedProjects([])}>
@@ -579,10 +593,10 @@ const ProjectsPage = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                            <DropdownMenuItem onSelect={() => handleOpenTaskDialog(task)}>
+                            <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenTaskDialog(task); }}>
                               <Pencil className="h-4 w-4 mr-2" />Modifier
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => handleDeleteTask(task)} className="text-destructive">
+                            <DropdownMenuItem onSelect={() => { markDropdownAction(); handleDeleteTask(task); }} className="text-destructive">
                               <Trash2 className="h-4 w-4 mr-2" />Supprimer
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -622,6 +636,7 @@ const ProjectsPage = () => {
                     <TableHead>Type</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Projet parent</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -648,6 +663,36 @@ const ProjectsPage = () => {
                           <TableCell className="text-sm text-muted-foreground">
                             {project.parent_id ? (projects.find((p) => p.id === project.parent_id)?.name || '-') : '-'}
                           </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenProjectDialog(project);
+                                }}
+                                title="Modifier le projet"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteProject(project);
+                                }}
+                                title="Supprimer le projet"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     }
@@ -670,6 +715,36 @@ const ProjectsPage = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{row.project?.name || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenTaskDialog(task);
+                              }}
+                              title="Modifier la tâche"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTask(task);
+                              }}
+                              title="Supprimer la tâche"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
