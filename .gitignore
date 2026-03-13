@@ -117,3 +117,6 @@ backend/requirements.local.txt
 # local secrets
 backend/.env
 **/.env
+
+*.bak
+*.bak.*
