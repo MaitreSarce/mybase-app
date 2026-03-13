@@ -2359,19 +2359,15 @@ async def toggle_media_preview(media_id: str, user: dict = Depends(get_current_u
                 },
                 {"$set": {"preview_on_card": False, "updated_at": now_iso}},
             )
+            await col.update_one(
+                {"id": item_id, "user_id": user["id"]},
+                {"$set": {"attachments.$[].preview_on_card": False}},
+            )
 
-        medias = await db.media_items.find(
-            {
-                "user_id": user["id"],
-                "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-            },
-            {"_id": 0},
-        ).sort("created_at", -1).to_list(2000)
-
-        attachments = [_build_attachment_from_media(m) for m in medias]
         await col.update_one(
             {"id": item_id, "user_id": user["id"]},
-            {"$set": {"attachments": attachments, "updated_at": now_iso}},
+            {"$set": {"attachments.$[a].preview_on_card": next_preview}},
+            array_filters=[{"$or": [{"a.id": media_id}, {"a.media_id": media_id}]}],
         )
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})

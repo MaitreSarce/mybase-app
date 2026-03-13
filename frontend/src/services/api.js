@@ -158,6 +158,7 @@ export const mediaApi = {
   },
   createLink: (data) => api.post('/media/link', data),
   update: (id, data) => api.put(`/media/${id}`, data),
+  togglePreview: (id) => api.post(`/media/${id}/toggle-preview`),
   attach: (id, itemType, itemId) => api.post(`/media/${id}/attach`, { item_type: itemType, item_id: itemId }),
   detach: (id, itemType, itemId) => api.delete(`/media/${id}/attach`, { params: { item_type: itemType, item_id: itemId } }),
   delete: (id) => api.delete(`/media/${id}`),

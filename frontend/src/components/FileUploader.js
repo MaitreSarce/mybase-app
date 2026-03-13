@@ -138,7 +138,7 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
 
   const handleTogglePreview = async (media) => {
     try {
-      await mediaApi.update(media.id, { preview_on_card: !media.preview_on_card });
+      await mediaApi.togglePreview(media.id);
       await fetchMedia();
       if (onUpdate) onUpdate();
     } catch {

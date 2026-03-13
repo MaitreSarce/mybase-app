@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+ backend:
+  build: ./backend
+  container_name: mybase-backend
+  restart: always
+  ports:
+   - "8001:8001"
+  env_file:
+   - ./backend/.env
+  volumes:
+   - /mnt/storage/mybase/uploads:/app/uploads
+  network_mode: "host"

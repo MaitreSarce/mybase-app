@@ -565,7 +565,6 @@ async def update_account(data: UserAccountUpdate, user: dict = Depends(get_curre
         return UserResponse(**current_user)
 
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     await db.users.update_one({"id": user["id"]}, {"$set": update_data})
 
     refreshed = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
@@ -611,7 +610,6 @@ async def get_collection(collection_id: str, user: dict = Depends(get_current_us
 async def update_collection(collection_id: str, data: CollectionUpdate, user: dict = Depends(get_current_user)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.collections.find_one_and_update(
         {"id": collection_id, "user_id": user["id"]},
@@ -709,7 +707,6 @@ async def update_inventory_item(item_id: str, data: InventoryItemUpdate, user: d
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.inventory.find_one_and_update(
         {"id": item_id, "user_id": user["id"]},
@@ -803,7 +800,6 @@ async def update_wishlist_item(item_id: str, data: WishlistItemUpdate, user: dic
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.wishlist.find_one_and_update(
         {"id": item_id, "user_id": user["id"]},
@@ -877,7 +873,6 @@ async def update_project(project_id: str, data: ProjectUpdate, user: dict = Depe
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.projects.find_one_and_update(
         {"id": project_id, "user_id": user["id"]},
@@ -967,7 +962,6 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     # Handle completion status change
     if "completed" in update_data and old_task.get("project_id"):
@@ -1077,7 +1071,6 @@ async def update_content(content_id: str, data: ContentUpdate, user: dict = Depe
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.content.find_one_and_update(
         {"id": content_id, "user_id": user["id"]},
@@ -1165,7 +1158,6 @@ async def update_note_sheet(sheet_id: str, data: NoteSheetUpdate, user: dict = D
     if "name" in update_data:
         update_data["name"] = update_data["name"].strip()
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     updated = await db.note_sheets.find_one_and_update(
         {"id": sheet_id, "user_id": user["id"]},
@@ -1275,7 +1267,6 @@ async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_c
         raise HTTPException(status_code=400, detail="Aucune modification")
 
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     updated = await db.notes.find_one_and_update(
         {"id": note_id, "user_id": user["id"]},
         {"$set": update_data},
@@ -1456,7 +1447,6 @@ async def update_portfolio_asset(asset_id: str, data: PortfolioAssetUpdate, user
             else:
                 update_data[k] = v
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
     
     result = await db.portfolio.find_one_and_update(
         {"id": asset_id, "user_id": user["id"]},
@@ -1710,7 +1700,6 @@ async def update_portfolio_v2_status(status_id: str, data: PortfolioV2StatusUpda
         if key in update_data:
             update_data[key] = _to_float(update_data[key])
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     result = await db.portfolio_v2_status.find_one_and_update(
         {"id": status_id, "user_id": user["id"]},
@@ -1783,7 +1772,6 @@ async def update_portfolio_v2_deposit(deposit_id: str, data: PortfolioV2DepositU
         sold = update_data.get("sold", _to_float(existing.get("sold")))
         update_data["total"] = invested - sold
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     result = await db.portfolio_v2_deposits.find_one_and_update(
         {"id": deposit_id, "user_id": user["id"]},
@@ -1836,7 +1824,6 @@ async def update_portfolio_v2_sale(sale_id: str, data: PortfolioV2SaleUpdate, us
     if "amount" in update_data:
         update_data["amount"] = _to_float(update_data["amount"])
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     result = await db.portfolio_v2_sales.find_one_and_update(
         {"id": sale_id, "user_id": user["id"]},
@@ -1911,7 +1898,6 @@ async def update_portfolio_v2_physical_asset(asset_id: str, data: PortfolioV2Phy
         if key in update_data:
             update_data[key] = _to_float(update_data[key])
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     result = await db.portfolio_v2_physical_assets.find_one_and_update(
         {"id": asset_id, "user_id": user["id"]},
@@ -1994,7 +1980,6 @@ async def update_portfolio_v2_snapshot(snapshot_id: str, data: PortfolioV2Snapsh
         if key in update_data:
             update_data[key] = _to_float(update_data[key])
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     result = await db.portfolio_v2_snapshots.find_one_and_update(
         {"id": snapshot_id, "user_id": user["id"]},
@@ -2127,7 +2112,7 @@ async def _attach_media_to_item(media_doc: Dict[str, Any], item_type: str, item_
 
 async def _detach_media_from_item(media_doc: Dict[str, Any], item_type: str, item_id: str, user_id: str):
     col = ITEM_COLLECTIONS.get(item_type)
-    if col is not None:
+    if col:
         await col.update_one(
             {"id": item_id, "user_id": user_id},
             {"$pull": {"attachments": {"id": media_doc["id"]}}}
@@ -2274,7 +2259,6 @@ async def create_media_link(payload: MediaLinkCreate, user: dict = Depends(get_c
     return _serialize_media(doc)
 
 
-
 @api_router.put("/media/{media_id}")
 async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends(get_current_user)):
     media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
@@ -2289,90 +2273,36 @@ async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends
         {"$set": update_data}
     )
 
-    # refresh doc after update
-    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
-    if not media_doc:
-        raise HTTPException(status_code=404, detail="Media non trouve")
+    media_doc.update(update_data)
 
-    # synchronize attachments immediately for every linked item
-    for li in media_doc.get("linked_items", []):
-        item_type = li.get("item_type")
-        item_id = li.get("item_id")
-        col = ITEM_COLLECTIONS.get(item_type)
-        if col is None or not item_id:
-            continue
+    # Keep attachments in sync even if linked_items is stale/missing
+    if "preview_on_card" in update_data:
+        preview_value = bool(update_data["preview_on_card"])
+        for col in ITEM_COLLECTIONS.values():
+            docs = await col.find(
+                {"user_id": user["id"], "attachments.id": media_id},
+                {"_id": 0, "id": 1, "attachments": 1}
+            ).to_list(5000)
+            for d in docs:
+                atts = d.get("attachments") or []
+                changed = False
+                for a in atts:
+                    if a.get("id") == media_id and bool(a.get("preview_on_card", False)) != preview_value:
+                        a["preview_on_card"] = preview_value
+                        changed = True
+                if changed:
+                    await col.update_one(
+                        {"id": d["id"], "user_id": user["id"]},
+                        {"$set": {"attachments": atts}}
+                    )
 
-        if "preview_on_card" in update_data:
-            if bool(update_data["preview_on_card"]):
-                # one preview ON: set all false first, then this media true
-                await col.update_one(
-                    {"id": item_id, "user_id": user["id"]},
-                    {"$set": {"attachments.$[].preview_on_card": False}},
-                )
-                await db.media_items.update_many(
-                    {
-                        "user_id": user["id"],
-                        "id": {"$ne": media_id},
-                        "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-                    },
-                    {"$set": {"preview_on_card": False, "updated_at": datetime.now(timezone.utc).isoformat()}},
-                )
-
-            await col.update_one(
-                {"id": item_id, "user_id": user["id"]},
-                {"$set": {"attachments.$[a].preview_on_card": bool(update_data["preview_on_card"])}},
-                array_filters=[{"$or": [{"a.id": media_id}, {"a.media_id": media_id}]}],
-            )
-
-    saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
-    return _serialize_media(saved)
-
-
-
-@api_router.post("/media/{media_id}/toggle-preview")
-async def toggle_media_preview(media_id: str, user: dict = Depends(get_current_user)):
-    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
-    if not media_doc:
-        raise HTTPException(status_code=404, detail="Media non trouve")
-
-    next_preview = not bool(media_doc.get("preview_on_card", False))
-    now_iso = datetime.now(timezone.utc).isoformat()
-
-    await db.media_items.update_one(
-        {"id": media_id, "user_id": user["id"]},
-        {"$set": {"preview_on_card": next_preview, "updated_at": now_iso}},
-    )
-
-    for li in media_doc.get("linked_items", []):
-        item_type = li.get("item_type")
-        item_id = li.get("item_id")
-        col = ITEM_COLLECTIONS.get(item_type)
-        if col is None or not item_id:
-            continue
-
-        if next_preview:
-            await db.media_items.update_many(
-                {
-                    "user_id": user["id"],
-                    "id": {"$ne": media_id},
-                    "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-                },
-                {"$set": {"preview_on_card": False, "updated_at": now_iso}},
-            )
-
-        medias = await db.media_items.find(
-            {
-                "user_id": user["id"],
-                "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-            },
-            {"_id": 0},
-        ).sort("created_at", -1).to_list(2000)
-
-        attachments = [_build_attachment_from_media(m) for m in medias]
-        await col.update_one(
-            {"id": item_id, "user_id": user["id"]},
-            {"$set": {"attachments": attachments, "updated_at": now_iso}},
-        )
+    if "title" in update_data or "url" in update_data or "filename" in update_data or "mime_type" in update_data:
+        # Refresh full attachment payload for linked items (normal path)
+        for li in media_doc.get("linked_items", []):
+            item_type = li.get("item_type")
+            item_id = li.get("item_id")
+            if item_type in ITEM_COLLECTIONS and item_id:
+                await _sync_attachment_for_item(media_doc, item_type, item_id, user["id"])
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
     return _serialize_media(saved)
@@ -2398,12 +2328,18 @@ async def detach_media(media_id: str, item_type: str, item_id: str, user: dict =
     return {"message": "Media detache"}
 
 
-
 @api_router.delete("/media/{media_id}")
 async def delete_media(media_id: str, user: dict = Depends(get_current_user)):
     media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
     if not media_doc:
         raise HTTPException(status_code=404, detail="Media non trouve")
+
+    # Robust cleanup: remove attachment everywhere for this user
+    for col in ITEM_COLLECTIONS.values():
+        await col.update_many(
+            {"user_id": user["id"]},
+            {"$pull": {"attachments": {"id": media_id}}}
+        )
 
     if media_doc.get("kind") == "file" and media_doc.get("filename"):
         file_path = UPLOAD_DIR / media_doc["filename"]
@@ -2411,33 +2347,8 @@ async def delete_media(media_id: str, user: dict = Depends(get_current_user)):
             file_path.unlink()
 
     await db.media_items.delete_one({"id": media_id, "user_id": user["id"]})
-
-    # Remove stale attachments everywhere + fix preview fallback
-    for col in ITEM_COLLECTIONS.values():
-        docs = await col.find(
-            {"user_id": user["id"], "$or": [{"attachments.id": media_id}, {"attachments.media_id": media_id}]},
-            {"_id": 0, "id": 1, "attachments": 1},
-        ).to_list(5000)
-
-        for d in docs:
-            old = d.get("attachments") or []
-            new = [a for a in old if (a.get("id") or a.get("media_id")) != media_id]
-
-            if new and not any(bool(x.get("preview_on_card")) for x in new):
-                new[0]["preview_on_card"] = True
-                first_id = new[0].get("id") or new[0].get("media_id")
-                if first_id:
-                    await db.media_items.update_one(
-                        {"id": first_id, "user_id": user["id"]},
-                        {"$set": {"preview_on_card": True, "updated_at": datetime.now(timezone.utc).isoformat()}},
-                    )
-
-            await col.update_one(
-                {"id": d["id"], "user_id": user["id"]},
-                {"$set": {"attachments": new}}
-            )
-
     return {"message": "Media supprime"}
+
 
 @api_router.post("/upload/{item_type}/{item_id}")
 async def upload_file(
@@ -3195,7 +3106,6 @@ async def update_alert(alert_id: str, data: PriceAlertUpdate, user: dict = Depen
     update_data["triggered"] = False
     update_data["triggered_at"] = None
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data.pop("attachments", None)
 
     await db.alerts.update_one({"id": alert_id, "user_id": user["id"]}, {"$set": update_data})
     refreshed = await db.alerts.find_one({"id": alert_id, "user_id": user["id"]}, {"_id": 0})

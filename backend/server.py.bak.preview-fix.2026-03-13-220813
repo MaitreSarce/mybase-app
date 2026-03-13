@@ -2283,18 +2283,15 @@ async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends
 
     update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data.pop("attachments", None)
 
     await db.media_items.update_one(
         {"id": media_id, "user_id": user["id"]},
         {"$set": update_data}
     )
+    media_doc.update(update_data)
 
-    # refresh doc after update
-    media_doc = await db.media_items.find_one({"id": media_id, "user_id": user["id"]})
-    if not media_doc:
-        raise HTTPException(status_code=404, detail="Media non trouve")
-
-    # synchronize attachments immediately for every linked item
+    # Keep every linked item attachments in sync
     for li in media_doc.get("linked_items", []):
         item_type = li.get("item_type")
         item_id = li.get("item_id")
@@ -2302,13 +2299,29 @@ async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends
         if col is None or not item_id:
             continue
 
+        item = await col.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0, "attachments": 1})
+        if not item:
+            continue
+
+        atts = item.get("attachments") or []
+        found = False
+        for a in atts:
+            aid = a.get("id") or a.get("media_id")
+            if aid == media_id:
+                found = True
+                fresh = _build_attachment_from_media(media_doc)
+                a.update(fresh)
+
+        if not found:
+            atts.append(_build_attachment_from_media(media_doc))
+
         if "preview_on_card" in update_data:
-            if bool(update_data["preview_on_card"]):
-                # one preview ON: set all false first, then this media true
-                await col.update_one(
-                    {"id": item_id, "user_id": user["id"]},
-                    {"$set": {"attachments.$[].preview_on_card": False}},
-                )
+            pv = bool(update_data["preview_on_card"])
+            if pv:
+                for a in atts:
+                    aid = a.get("id") or a.get("media_id")
+                    a["preview_on_card"] = (aid == media_id)
+                # keep media_items consistent too
                 await db.media_items.update_many(
                     {
                         "user_id": user["id"],
@@ -2317,16 +2330,27 @@ async def update_media(media_id: str, payload: MediaUpdate, user: dict = Depends
                     },
                     {"$set": {"preview_on_card": False, "updated_at": datetime.now(timezone.utc).isoformat()}},
                 )
+            else:
+                for a in atts:
+                    aid = a.get("id") or a.get("media_id")
+                    if aid == media_id:
+                        a["preview_on_card"] = False
+                if atts and not any(bool(x.get("preview_on_card")) for x in atts):
+                    atts[0]["preview_on_card"] = True
+                    first_id = atts[0].get("id") or atts[0].get("media_id")
+                    if first_id:
+                        await db.media_items.update_one(
+                            {"id": first_id, "user_id": user["id"]},
+                            {"$set": {"preview_on_card": True, "updated_at": datetime.now(timezone.utc).isoformat()}},
+                        )
 
-            await col.update_one(
-                {"id": item_id, "user_id": user["id"]},
-                {"$set": {"attachments.$[a].preview_on_card": bool(update_data["preview_on_card"])}},
-                array_filters=[{"$or": [{"a.id": media_id}, {"a.media_id": media_id}]}],
-            )
+        await col.update_one(
+            {"id": item_id, "user_id": user["id"]},
+            {"$set": {"attachments": atts}}
+        )
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
     return _serialize_media(saved)
-
 
 
 @api_router.post("/media/{media_id}/toggle-preview")
@@ -2346,33 +2370,17 @@ async def toggle_media_preview(media_id: str, user: dict = Depends(get_current_u
     for li in media_doc.get("linked_items", []):
         item_type = li.get("item_type")
         item_id = li.get("item_id")
-        col = ITEM_COLLECTIONS.get(item_type)
-        if col is None or not item_id:
-            continue
-
-        if next_preview:
-            await db.media_items.update_many(
-                {
-                    "user_id": user["id"],
-                    "id": {"$ne": media_id},
-                    "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-                },
-                {"$set": {"preview_on_card": False, "updated_at": now_iso}},
-            )
-
-        medias = await db.media_items.find(
-            {
-                "user_id": user["id"],
-                "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
-            },
-            {"_id": 0},
-        ).sort("created_at", -1).to_list(2000)
-
-        attachments = [_build_attachment_from_media(m) for m in medias]
-        await col.update_one(
-            {"id": item_id, "user_id": user["id"]},
-            {"$set": {"attachments": attachments, "updated_at": now_iso}},
-        )
+        if item_type in ITEM_COLLECTIONS and item_id:
+            if next_preview:
+                await db.media_items.update_many(
+                    {
+                        "user_id": user["id"],
+                        "id": {"$ne": media_id},
+                        "linked_items": {"$elemMatch": {"item_type": item_type, "item_id": item_id}},
+                    },
+                    {"$set": {"preview_on_card": False, "updated_at": now_iso}},
+                )
+            await _rebuild_item_attachments(item_type, item_id, user["id"])
 
     saved = await db.media_items.find_one({"id": media_id, "user_id": user["id"]}, {"_id": 0})
     return _serialize_media(saved)
