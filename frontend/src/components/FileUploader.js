@@ -5,6 +5,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from './ui/dialog';
 import { isImageUrl, isVideoUrl, getVideoEmbedUrl } from '../lib/mediaPreview';
 import {
   Upload,
@@ -29,6 +32,7 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [mediaItems, setMediaItems] = useState([]);
+  const [previewMedia, setPreviewMedia] = useState(null);
   const fileInputRef = useRef(null);
 
   const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
@@ -168,6 +172,12 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
     return File;
   };
 
+  const previewUrl = previewMedia ? toMediaUrl(previewMedia) : '';
+  const previewIsImage = previewMedia && previewUrl ? isImageMedia(previewMedia, previewUrl) : false;
+  const previewIsVideo = previewMedia && previewUrl ? isVideoMedia(previewMedia, previewUrl) : false;
+  const previewEmbedUrl = previewMedia?.kind === 'link' && previewUrl ? getVideoEmbedUrl(previewUrl) : null;
+  const PreviewIcon = getFileIcon(previewMedia, previewUrl);
+
   return (
     <div className="space-y-3 rounded-lg border border-border/60 p-3 bg-muted/10 overflow-hidden w-full max-w-full min-w-0">
       <div className="flex items-center justify-between gap-2 w-full min-w-0">
@@ -215,23 +225,58 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
             return (
               <div key={media.id} className="w-full min-w-0 overflow-hidden grid grid-cols-[48px_minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 p-2 rounded-md bg-secondary/20 border border-border/40">
                 {imagePreview ? (
-                  <img src={url} alt={media.title || media.original_name || 'media'} className="h-12 w-12 rounded object-cover" />
+                  <button
+                    type="button"
+                    className="h-12 w-12 rounded overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    onClick={() => setPreviewMedia(media)}
+                    title="Afficher en grand"
+                  >
+                    <img src={url} alt={media.title || media.original_name || 'media'} className="h-12 w-12 rounded object-cover" />
+                  </button>
                 ) : videoPreview ? (
                   embedUrl ? (
-                    <iframe
-                      src={embedUrl}
-                      title={media.title || media.original_name || 'video'}
-                      className="h-12 w-12 rounded border border-border/40"
-                      allow="autoplay; encrypted-media; picture-in-picture"
-                    />
+                    <button
+                      type="button"
+                      className="h-12 w-12 rounded overflow-hidden border border-border/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => setPreviewMedia(media)}
+                      title="Afficher en grand"
+                    >
+                      <iframe
+                        src={embedUrl}
+                        title={media.title || media.original_name || 'video'}
+                        className="h-12 w-12 rounded border border-border/40"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                      />
+                    </button>
                   ) : (
-                    <video src={url} className="h-12 w-12 rounded object-cover" muted preload="metadata" />
+                    <button
+                      type="button"
+                      className="h-12 w-12 rounded overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => setPreviewMedia(media)}
+                      title="Afficher en grand"
+                    >
+                      <video src={url} className="h-12 w-12 rounded object-cover" muted preload="metadata" />
+                    </button>
                   )
                 ) : (
-                  <div className="h-12 w-12 rounded bg-secondary flex items-center justify-center"><Icon className="h-5 w-5 text-muted-foreground" /></div>
+                  <button
+                    type="button"
+                    className="h-12 w-12 rounded bg-secondary flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    onClick={() => setPreviewMedia(media)}
+                    title="Afficher en grand"
+                  >
+                    <Icon className="h-5 w-5 text-muted-foreground" />
+                  </button>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate break-all">{media.title || media.original_name || media.url}</p>
+                  <button
+                    type="button"
+                    className="text-sm font-medium truncate break-all text-left hover:underline"
+                    onClick={() => setPreviewMedia(media)}
+                    title="Afficher en grand"
+                  >
+                    {media.title || media.original_name || media.url}
+                  </button>
                   <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
                     {media.kind === 'file' ? <span>{formatFileSize(media.size)}</span> : <span>Lien externe</span>}
                     {media.preview_on_card ? <Badge variant="default">Preview ON</Badge> : <Badge variant="outline">Preview OFF</Badge>}
@@ -255,6 +300,54 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
           })}
         </div>
       )}
+
+      <Dialog open={!!previewMedia} onOpenChange={(open) => { if (!open) setPreviewMedia(null); }}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="truncate">
+              {previewMedia?.title || previewMedia?.original_name || previewMedia?.url || 'Aperçu média'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {previewIsImage && previewUrl && (
+              <img src={previewUrl} alt={previewMedia?.title || 'media'} className="w-full max-h-[70vh] object-contain rounded-md border border-border/40 bg-black/20" />
+            )}
+
+            {previewIsVideo && previewUrl && (
+              previewEmbedUrl ? (
+                <iframe
+                  src={previewEmbedUrl}
+                  title={previewMedia?.title || 'video'}
+                  className="w-full h-[70vh] rounded-md border border-border/40 bg-black/20"
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                  allowFullScreen
+                />
+              ) : (
+                <video src={previewUrl} className="w-full max-h-[70vh] rounded-md border border-border/40 bg-black/20" controls autoPlay />
+              )
+            )}
+
+            {!previewIsImage && !previewIsVideo && (
+              <div className="w-full min-h-[220px] rounded-md border border-border/40 bg-secondary/20 flex flex-col items-center justify-center gap-3 text-center p-4">
+                <PreviewIcon className="h-10 w-10 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground break-all">
+                  Aperçu direct non disponible pour ce type de média.
+                </p>
+              </div>
+            )}
+
+            {previewUrl && (
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={() => window.open(previewUrl, '_blank')}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Ouvrir dans un nouvel onglet
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
