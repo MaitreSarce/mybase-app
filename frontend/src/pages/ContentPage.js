@@ -51,6 +51,7 @@ const ContentPage = () => {
   const [newTag, setNewTag] = useState('');
   const [customType, setCustomType] = useState('');
   const [collapsedHierarchy, setCollapsedHierarchy] = useState({});
+  const [hierarchyFilterContents, setHierarchyFilterContents] = useState([]);
   const [formData, setFormData] = useState({
     title: '', content_type: 'recipe', description: '', body: '', tags: [], category: '', parent_id: ''
   });
@@ -170,15 +171,38 @@ const ContentPage = () => {
     return ancestors;
   };
 
+  const buildContentFilterOptions = (parentId = null, seen = new Set()) => {
+    const branch = items
+      .filter((it) => (parentId ? it.parent_id === parentId : !it.parent_id))
+      .map((item) => {
+        if (seen.has(item.id)) return null;
+        const nextSeen = new Set(seen);
+        nextSeen.add(item.id);
+        return {
+          value: item.id,
+          label: item.title,
+          children: buildContentFilterOptions(item.id, nextSeen),
+        };
+      })
+      .filter(Boolean);
+    return branch;
+  };
+  const contentFilterOpts = buildContentFilterOptions();
+
+  const selectedHierarchyContentIds = hierarchyFilterContents.length === 0
+    ? null
+    : new Set(hierarchyFilterContents.flatMap((contentId) => [contentId, ...getDescendantContentIds(contentId)]));
+
   const filteredItems = items.filter(item => {
     if (searchQuery && !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) && !item.description?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (filterTypes.length && !filterTypes.includes(item.content_type)) return false;
     if (filterTags.length && !filterTags.some(t => item.tags?.includes(t))) return false;
+    if (selectedHierarchyContentIds && !selectedHierarchyContentIds.has(item.id)) return false;
     return true;
   });
 
   const filteredItemIds = new Set(filteredItems.map((item) => item.id));
-  const visibleHierarchyIds = (searchQuery || filterTypes.length || filterTags.length)
+  const visibleHierarchyIds = (searchQuery || filterTypes.length || filterTags.length || hierarchyFilterContents.length)
     ? (() => {
         const ids = new Set(filteredItemIds);
         filteredItems.forEach((item) => {
@@ -205,13 +229,30 @@ const ContentPage = () => {
   const toggleCollapse = (itemId) => {
     setCollapsedHierarchy((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
   };
+  const expandAllHierarchy = () => {
+    setCollapsedHierarchy({});
+  };
+  const collapseAllHierarchy = () => {
+    const next = {};
+    items.forEach((item) => {
+      if (getChildren(item.id).length > 0) next[item.id] = true;
+    });
+    setCollapsedHierarchy(next);
+  };
 
   const typeOpts = allContentTypes.map(t => ({ value: t.value, label: t.label }));
   const tagOpts = allTags.map(t => ({ value: t.name, label: t.name }));
   const disallowedParentIds = editingItem
     ? new Set([editingItem.id, ...getDescendantContentIds(editingItem.id)])
     : new Set();
-  const parentCandidates = items.filter((it) => !disallowedParentIds.has(it.id));
+  const pruneContentOptions = (options) => options
+    .map((opt) => {
+      const children = pruneContentOptions(opt.children || []);
+      if (disallowedParentIds.has(opt.value)) return null;
+      return { ...opt, children };
+    })
+    .filter(Boolean);
+  const parentContentOpts = pruneContentOptions(contentFilterOpts);
 
   if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /></div>;
 
@@ -229,6 +270,29 @@ const ContentPage = () => {
         </div>
         {typeOpts.length > 0 && <MultiSelect options={typeOpts} selected={filterTypes} onChange={setFilterTypes} placeholder="Types" testId="filter-types" />}
         {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="filter-tags" />}
+        <MultiSelect
+          options={contentFilterOpts}
+          selected={hierarchyFilterContents}
+          onChange={setHierarchyFilterContents}
+          placeholder="Contenus"
+          testId="content-hierarchy-filter"
+          hierarchical
+        />
+        {hierarchyFilterContents.length > 0 && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setHierarchyFilterContents([])}>
+            Réinitialiser
+          </Button>
+        )}
+        {view === 'table' && (
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={expandAllHierarchy}>
+              Tout déplier
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={collapseAllHierarchy}>
+              Tout replier
+            </Button>
+          </>
+        )}
         <ViewToggle view={view} onChange={setView} />
       </div>
 
@@ -360,19 +424,24 @@ const ContentPage = () => {
               <div className="space-y-2"><Label>Catégorie</Label><Input value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Cuisine, Électronique..." /></div>
               <div className="space-y-2">
                 <Label>Contenu parent</Label>
-                <Select value={formData.parent_id || '__root__'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === '__root__' ? '' : v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Aucun parent (racine)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__root__">Aucun parent (racine)</SelectItem>
-                    {parentCandidates.map((candidate) => (
-                      <SelectItem key={candidate.id} value={candidate.id}>
-                        {candidate.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <MultiSelect
+                    options={parentContentOpts}
+                    selected={formData.parent_id ? [formData.parent_id] : []}
+                    onChange={(values) => {
+                      const next = values.length ? values[values.length - 1] : '';
+                      setFormData({ ...formData, parent_id: next });
+                    }}
+                    placeholder="Contenu parent"
+                    testId="content-parent-select"
+                    hierarchical
+                  />
+                  {formData.parent_id && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({ ...formData, parent_id: '' })}>
+                      Racine
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="space-y-2"><Label>Tags</Label>
                 <div className="flex gap-2"><Input value={newTag} list="content-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>

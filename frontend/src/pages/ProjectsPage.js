@@ -9,7 +9,6 @@ import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
 import { Checkbox } from '../components/ui/checkbox';
-import { Progress } from '../components/ui/progress';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
@@ -25,11 +24,10 @@ import {
 } from '../components/ui/table';
 import {
   Plus, MoreVertical, Pencil, Trash2, FolderKanban, Loader2,
-  CheckCircle2, Circle, Calendar, CornerDownRight, Search, X, FileText, ChevronDown, ChevronRight,
+  CheckCircle2, Circle, Calendar, CornerDownRight, Search, X, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import ItemLinksManager from '../components/ItemLinksManager';
 import FileUploader from '../components/FileUploader';
-import { isImageUrl, isVideoUrl, isDocumentUrl, getVideoEmbedUrl, getDocumentLabel } from '../lib/mediaPreview';
 import { MultiSelect } from '../components/MultiSelect';
 
 const COLORS = [
@@ -58,12 +56,11 @@ const ProjectsPage = () => {
   const [editingProject, setEditingProject] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [selectedProjects, setSelectedProjects] = useState([]);
   const [showCompleted, setShowCompleted] = useState(false);
   const [allTags, setAllTags] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('projects');
+  const [activeTab, setActiveTab] = useState('tasks');
   const [newTaskTag, setNewTaskTag] = useState('');
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
   const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
@@ -192,26 +189,6 @@ const ProjectsPage = () => {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  };  const getPreviewAttachment = (item) => (item.attachments || []).find((a) => a?.preview_on_card);
-  const previewUrl = (attachment) => {
-    if (!attachment) return null;
-    if (attachment.url) return attachment.url;
-    if (attachment.filename) return `${(process.env.REACT_APP_BACKEND_URL || '')}/uploads/${attachment.filename}`;
-    return null;
-  };
-  const isImagePreview = (attachment) => {
-    const mime = String(attachment?.mime_type || '');
-    if (mime.startsWith('image/')) return true;
-    return isImageUrl(attachment?.url);
-  };
-  const isVideoPreview = (attachment) => {
-    const mime = String(attachment?.mime_type || '');
-    if (mime.startsWith('video/')) return true;
-    return isVideoUrl(attachment?.url) || Boolean(getVideoEmbedUrl(attachment?.url));
-  };
-  const isDocumentPreview = (attachment) => {
-    const mime = String(attachment?.mime_type || '').toLowerCase();
-    return mime.includes('pdf') || mime.includes('sheet') || mime.includes('excel') || mime.includes('word') || mime.includes('csv') || isDocumentUrl(attachment?.url);
   };
 
   // Build project tree
@@ -248,9 +225,9 @@ const ProjectsPage = () => {
     return ancestors;
   };
 
-  const selectedProjectIds = selectedProjects.length === 0
+  const selectedProjectIds = hierarchyFilterProjects.length === 0
     ? null
-    : [...new Set(selectedProjects.flatMap((projectId) => [projectId, ...getDescendantProjectIds(projectId)]))];
+    : [...new Set(hierarchyFilterProjects.flatMap((projectId) => [projectId, ...getDescendantProjectIds(projectId)]))];
 
   const filteredTasks = tasks.filter(task => {
     if (!showCompleted && task.completed) return false;
@@ -279,11 +256,19 @@ const ProjectsPage = () => {
     return branch;
   };
   const projectFilterOpts = buildProjectFilterOptions();
-
-  const handleProjectClick = (projectId) => {
-    setSelectedProjects([projectId]);
-    setActiveTab('tasks');
-  };
+  const disallowedParentProjectIds = editingProject
+    ? new Set([editingProject.id, ...getDescendantProjectIds(editingProject.id)])
+    : new Set();
+  const pruneProjectOptions = (options) => options
+    .map((opt) => {
+      const children = pruneProjectOptions(opt.children || []);
+      if (disallowedParentProjectIds.has(opt.value)) {
+        return null;
+      }
+      return { ...opt, children };
+    })
+    .filter(Boolean);
+  const parentProjectOpts = pruneProjectOptions(projectFilterOpts);
 
   const addTaskTag = () => {
     const tag = newTaskTag.trim();
@@ -349,101 +334,17 @@ const ProjectsPage = () => {
   const toggleHierarchyProject = (projectId) => {
     setCollapsedHierarchyProjects((prev) => ({ ...prev, [projectId]: !prev[projectId] }));
   };
-  const ProjectCard = ({ project, depth = 0 }) => {
-    const children = getChildren(project.id);
-    const aggregateStats = getProjectAggregateStats(project.id);
-    const progress = aggregateStats.total > 0 ? (aggregateStats.completed / aggregateStats.total) * 100 : 0;
-    return (
-      <div className={depth > 0 ? 'ml-6' : ''}>
-        <Card className="bg-card border-border card-hover group"
-          data-testid={`project-card-${project.id}`}>
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => handleProjectClick(project.id)}>
-              {depth > 0 && <CornerDownRight className="h-4 w-4 text-muted-foreground" />}
-              <div className={`w-3 h-3 rounded-full ${getColorClass(project.color)}`} />
-              <CardTitle className="text-lg">{project.name}</CardTitle>
-              {project.status !== 'active' && <Badge variant="outline" className="text-xs">{project.status}</Badge>}
-            </div>
-            <DropdownMenu onOpenChange={(open) => {
-                          if (!open) {
-                            dropdownActionRef.current = true;
-                            setTimeout(() => { dropdownActionRef.current = false; }, 250);
-                          }
-                        }}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenTaskDialog(null, project.id); }}>
-                  <Plus className="h-4 w-4 mr-2" />Ajouter une tâche
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenProjectDialog(null, project.id); }}>
-                  <Plus className="h-4 w-4 mr-2" />Ajouter un sous-projet
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleOpenProjectDialog(project); }}>
-                  <Pencil className="h-4 w-4 mr-2" />Modifier
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => { markDropdownAction(); handleDeleteProject(project); }} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />Supprimer
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </CardHeader>
-          <CardContent className="cursor-pointer" onClick={() => handleProjectClick(project.id)}>
-            {(() => {
-              const preview = getPreviewAttachment(project);
-              const url = previewUrl(preview);
-              if (!url) return null;
-              if (isImagePreview(preview)) {
-                return <img src={url} alt={project.name} className="w-full h-32 object-cover rounded-md mb-3 border border-border/40" />;
-              }
-              if (isVideoPreview(preview)) {
-                const embedUrl = getVideoEmbedUrl(url);
-                return embedUrl ? (
-                  <iframe src={embedUrl} title={project.name} className="w-full h-32 rounded-md mb-3 border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
-                ) : (
-                  <video src={url} className="w-full h-32 object-cover rounded-md mb-3 border border-border/40" controls preload="metadata" />
-                );
-              }
-              if (isDocumentPreview(preview)) {
-                return (
-                  <div className="w-full h-32 rounded-md mb-3 border border-border/40 bg-secondary/20 flex items-center gap-3 px-3">
-                    <FileText className="h-8 w-8 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
-                      <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-            {project.description && (
-              <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{project.description}</p>
-            )}
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Progression</span>
-                <span className="font-mono">{aggregateStats.completed}/{aggregateStats.total}</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-            {children.length > 0 && (
-              <div className="mt-2">
-                <Badge variant="secondary" className="text-xs">{children.length} sous-projet{children.length > 1 ? 's' : ''}</Badge>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        {children.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {children.map(child => <ProjectCard key={child.id} project={child} depth={depth + 1} />)}
-          </div>
-        )}
-      </div>
-    );
+  const expandAllHierarchyProjects = () => {
+    setCollapsedHierarchyProjects({});
+  };
+  const collapseAllHierarchyProjects = () => {
+    const next = {};
+    projects.forEach((project) => {
+      const hasChildrenProjects = getChildren(project.id).length > 0;
+      const hasDirectTasks = tasks.some((t) => t.project_id === project.id);
+      if (hasChildrenProjects || hasDirectTasks) next[project.id] = true;
+    });
+    setCollapsedHierarchyProjects(next);
   };
 
   if (loading) {
@@ -498,55 +399,25 @@ const ProjectsPage = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="projects" data-testid="projects-tab">Projets</TabsTrigger>
           <TabsTrigger value="tasks" data-testid="tasks-tab">Tâches</TabsTrigger>
           <TabsTrigger value="hierarchy" data-testid="hierarchy-tab">Arborescence</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="projects" className="space-y-4">
-          {projects.length === 0 ? (
-            <Card className="bg-card border-border border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Aucun projet</h3>
-                <p className="text-sm text-muted-foreground mb-4">Créez votre premier projet pour commencer</p>
-                <Button onClick={() => handleOpenProjectDialog()}>
-                  <Plus className="h-4 w-4 mr-2" />Créer un projet
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rootProjects.map(project => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
         <TabsContent value="tasks" className="space-y-4">
-                    <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
               <Checkbox id="showCompleted" checked={showCompleted} onCheckedChange={setShowCompleted}
                 data-testid="show-completed-checkbox" />
               <Label htmlFor="showCompleted" className="text-sm cursor-pointer">Afficher terminées</Label>
             </div>
-            <MultiSelect
-              options={projectFilterOpts}
-              selected={selectedProjects}
-              onChange={setSelectedProjects}
-              placeholder="Projets (multi)"
-              testId="tasks-filter-project"
-              hierarchical
-            />
-            {selectedProjects.length > 0 && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedProjects([])}>
+            {hierarchyFilterProjects.length > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setHierarchyFilterProjects([])}>
                 Réinitialiser
               </Button>
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            Les tâches des sous-projets sont incluses automatiquement.
+            Le filtre projet de l'en-tête reste actif entre les onglets et inclut automatiquement les sous-projets.
           </div>
 
           {filteredTasks.length === 0 ? (
@@ -630,6 +501,14 @@ const ProjectsPage = () => {
         </TabsContent>
 
         <TabsContent value="hierarchy" className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={expandAllHierarchyProjects}>
+              Tout déplier
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={collapseAllHierarchyProjects}>
+              Tout replier
+            </Button>
+          </div>
           {hierarchyRows.length === 0 ? (
             <Card className="bg-card border-border border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -819,14 +698,24 @@ const ProjectsPage = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Projet</Label>
-                  <Select value={taskForm.project_id || "none"}
-                    onValueChange={v => setTaskForm({...taskForm, project_id: v === "none" ? "" : v})}>
-                    <SelectTrigger data-testid="task-project-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucun projet</SelectItem>
-                      {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <MultiSelect
+                      options={projectFilterOpts}
+                      selected={taskForm.project_id ? [taskForm.project_id] : []}
+                      onChange={(values) => {
+                        const next = values.length ? values[values.length - 1] : '';
+                        setTaskForm({ ...taskForm, project_id: next });
+                      }}
+                      placeholder="Projet"
+                      testId="task-project-select"
+                      hierarchical
+                    />
+                    {taskForm.project_id && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setTaskForm({ ...taskForm, project_id: '' })}>
+                        Aucun
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Priorité</Label>
@@ -929,16 +818,24 @@ const ProjectsPage = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Projet parent</Label>
-                  <Select value={projectForm.parent_id || "none"}
-                    onValueChange={v => setProjectForm({...projectForm, parent_id: v === "none" ? "" : v})}>
-                    <SelectTrigger data-testid="project-parent-select"><SelectValue placeholder="Aucun" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucun (racine)</SelectItem>
-                      {projects.filter(p => p.id !== editingProject?.id).map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <MultiSelect
+                      options={parentProjectOpts}
+                      selected={projectForm.parent_id ? [projectForm.parent_id] : []}
+                      onChange={(values) => {
+                        const next = values.length ? values[values.length - 1] : '';
+                        setProjectForm({ ...projectForm, parent_id: next });
+                      }}
+                      placeholder="Projet parent"
+                      testId="project-parent-select"
+                      hierarchical
+                    />
+                    {projectForm.parent_id && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setProjectForm({ ...projectForm, parent_id: '' })}>
+                        Racine
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
               {editingProject && (
