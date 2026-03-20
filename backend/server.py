@@ -317,6 +317,7 @@ class ContentCreate(BaseModel):
     metadata: List[MetadataField] = []
     links: List[ItemLink] = []
     category: Optional[str] = None
+    parent_id: Optional[str] = None
 
 class ContentUpdate(BaseModel):
     title: Optional[str] = None
@@ -328,6 +329,7 @@ class ContentUpdate(BaseModel):
     metadata: Optional[List[MetadataField]] = None
     links: Optional[List[ItemLink]] = None
     category: Optional[str] = None
+    parent_id: Optional[str] = None
 
 class ContentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -343,6 +345,7 @@ class ContentResponse(BaseModel):
     links: List[Dict[str, Any]] = []
     attachments: List[Dict[str, Any]] = []
     category: Optional[str] = None
+    parent_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -1013,6 +1016,14 @@ async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.post("/content", response_model=ContentResponse)
 async def create_content(data: ContentCreate, user: dict = Depends(get_current_user)):
+    if data.parent_id:
+        parent = await db.content.find_one(
+            {"id": data.parent_id, "user_id": user["id"]},
+            {"_id": 0, "id": 1},
+        )
+        if not parent:
+            raise HTTPException(status_code=400, detail="Contenu parent introuvable")
+
     content_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
@@ -1029,6 +1040,7 @@ async def create_content(data: ContentCreate, user: dict = Depends(get_current_u
         "links": [l.model_dump() for l in data.links],
         "attachments": [],
         "category": data.category,
+        "parent_id": data.parent_id,
         "created_at": now,
         "updated_at": now
     }
@@ -1067,9 +1079,22 @@ async def get_content_item(content_id: str, user: dict = Depends(get_current_use
 
 @api_router.put("/content/{content_id}", response_model=ContentResponse)
 async def update_content(content_id: str, data: ContentUpdate, user: dict = Depends(get_current_user)):
+    if data.parent_id == content_id:
+        raise HTTPException(status_code=400, detail="Un contenu ne peut pas etre son propre parent")
+
+    if data.parent_id is not None:
+        if data.parent_id:
+            parent = await db.content.find_one(
+                {"id": data.parent_id, "user_id": user["id"]},
+                {"_id": 0, "id": 1},
+            )
+            if not parent:
+                raise HTTPException(status_code=400, detail="Contenu parent introuvable")
+
     update_data = {}
     for k, v in data.model_dump().items():
-        if v is not None:
+        # parent_id must allow explicit null to move content back to root.
+        if v is not None or k == "parent_id":
             if k == "metadata":
                 update_data[k] = [m.model_dump() if hasattr(m, 'model_dump') else m for m in v]
             elif k == "links":
@@ -1091,6 +1116,10 @@ async def update_content(content_id: str, data: ContentUpdate, user: dict = Depe
 
 @api_router.delete("/content/{content_id}")
 async def delete_content(content_id: str, user: dict = Depends(get_current_user)):
+    await db.content.update_many(
+        {"parent_id": content_id, "user_id": user["id"]},
+        {"$set": {"parent_id": None, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
     result = await db.content.delete_one({"id": content_id, "user_id": user["id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Contenu non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")

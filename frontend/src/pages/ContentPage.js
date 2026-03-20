@@ -22,7 +22,7 @@ import {
 } from '../components/ui/table';
 import {
   Plus, MoreVertical, Pencil, Trash2, BookOpen, Loader2,
-  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink
+  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink, ChevronDown, ChevronRight, CornerDownRight
 } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
@@ -47,11 +47,12 @@ const ContentPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTypes, setFilterTypes] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
-  const [view, setView] = useState('card');
+  const [view, setView] = useState('table');
   const [newTag, setNewTag] = useState('');
   const [customType, setCustomType] = useState('');
+  const [collapsedHierarchy, setCollapsedHierarchy] = useState({});
   const [formData, setFormData] = useState({
-    title: '', content_type: 'recipe', description: '', body: '', tags: [], category: ''
+    title: '', content_type: 'recipe', description: '', body: '', tags: [], category: '', parent_id: ''
   });
   const dropdownActionRef = useRef(false);
 
@@ -74,22 +75,32 @@ const ContentPage = () => {
     return types;
   })();
 
-  const handleOpenDialog = (item = null) => {
+  const handleOpenDialog = (item = null, parentId = null) => {
     if (item) {
       setEditingItem(item);
-      setFormData({ title: item.title, content_type: item.content_type, description: item.description || '', body: item.body || '', url: item.url || '', tags: item.tags || [], category: item.category || '' });
+      setFormData({
+        title: item.title,
+        content_type: item.content_type,
+        description: item.description || '',
+        body: item.body || '',
+        url: item.url || '',
+        tags: item.tags || [],
+        category: item.category || '',
+        parent_id: item.parent_id || '',
+      });
     } else {
       setEditingItem(null);
-      setFormData({ title: '', content_type: 'recipe', description: '', body: '', url: '', tags: [], category: '' });
+      setFormData({ title: '', content_type: 'recipe', description: '', body: '', url: '', tags: [], category: '', parent_id: parentId || '' });
     }
     setDialogOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
+    const payload = { ...formData, parent_id: formData.parent_id || null };
     try {
-      if (editingItem) { await contentApi.update(editingItem.id, formData); toast.success('Contenu mis à jour'); }
-      else { await contentApi.create(formData); toast.success('Contenu créé'); }
+      if (editingItem) { await contentApi.update(editingItem.id, payload); toast.success('Contenu mis à jour'); }
+      else { await contentApi.create(payload); toast.success('Contenu créé'); }
       setDialogOpen(false); fetchData();
     } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); } finally { setSaving(false); }
   };
@@ -134,6 +145,31 @@ const ContentPage = () => {
     return mime.includes('pdf') || mime.includes('sheet') || mime.includes('excel') || mime.includes('word') || mime.includes('csv') || isDocumentUrl(attachment?.url);
   };
 
+  const getChildren = (parentId) => items.filter((it) => it.parent_id === parentId);
+  const rootItems = items.filter((it) => !it.parent_id);
+
+  const getDescendantContentIds = (contentId) => {
+    const directChildren = getChildren(contentId);
+    const descendantIds = [];
+    directChildren.forEach((child) => {
+      descendantIds.push(child.id);
+      descendantIds.push(...getDescendantContentIds(child.id));
+    });
+    return descendantIds;
+  };
+
+  const getAncestorContentIds = (contentId) => {
+    const ancestors = [];
+    const seen = new Set();
+    let current = items.find((it) => it.id === contentId);
+    while (current?.parent_id && !seen.has(current.parent_id)) {
+      seen.add(current.parent_id);
+      ancestors.push(current.parent_id);
+      current = items.find((it) => it.id === current.parent_id);
+    }
+    return ancestors;
+  };
+
   const filteredItems = items.filter(item => {
     if (searchQuery && !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) && !item.description?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (filterTypes.length && !filterTypes.includes(item.content_type)) return false;
@@ -141,8 +177,41 @@ const ContentPage = () => {
     return true;
   });
 
+  const filteredItemIds = new Set(filteredItems.map((item) => item.id));
+  const visibleHierarchyIds = (searchQuery || filterTypes.length || filterTags.length)
+    ? (() => {
+        const ids = new Set(filteredItemIds);
+        filteredItems.forEach((item) => {
+          getAncestorContentIds(item.id).forEach((ancestorId) => ids.add(ancestorId));
+        });
+        return ids;
+      })()
+    : null;
+
+  const buildHierarchyRows = () => {
+    const rows = [];
+    const pushItem = (item, depth = 0) => {
+      if (visibleHierarchyIds && !visibleHierarchyIds.has(item.id)) return;
+      rows.push({ item, depth });
+      if (collapsedHierarchy[item.id]) return;
+      getChildren(item.id).forEach((child) => pushItem(child, depth + 1));
+    };
+    rootItems.forEach((root) => pushItem(root, 0));
+    return rows;
+  };
+
+  const hierarchyRows = buildHierarchyRows();
+
+  const toggleCollapse = (itemId) => {
+    setCollapsedHierarchy((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
   const typeOpts = allContentTypes.map(t => ({ value: t.value, label: t.label }));
   const tagOpts = allTags.map(t => ({ value: t.name, label: t.name }));
+  const disallowedParentIds = editingItem
+    ? new Set([editingItem.id, ...getDescendantContentIds(editingItem.id)])
+    : new Set();
+  const parentCandidates = items.filter((it) => !disallowedParentIds.has(it.id));
 
   if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /></div>;
 
@@ -225,13 +294,43 @@ const ContentPage = () => {
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <Table><TableHeader><TableRow><TableHead>Titre</TableHead><TableHead>Type</TableHead><TableHead>Catégorie</TableHead><TableHead>Tags</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
-            <TableBody>{filteredItems.map(item => {
+            <TableBody>{hierarchyRows.map(({ item, depth }) => {
               const ti = getTypeInfo(item.content_type);
+              const children = getChildren(item.id);
+              const hasChildren = children.length > 0;
+              const isCollapsed = !!collapsedHierarchy[item.id];
+              const isDirectMatch = filteredItemIds.has(item.id);
               return (<TableRow key={item.id} className="cursor-pointer hover:bg-secondary/30" onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
-                <TableCell className="font-medium">{item.title}</TableCell><TableCell><Badge variant="outline" className="text-xs">{ti.label}</Badge></TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
+                    {depth > 0 && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                    {hasChildren ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => { e.stopPropagation(); toggleCollapse(item.id); }}
+                        title={isCollapsed ? 'Déplier' : 'Replier'}
+                      >
+                        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    ) : (
+                      <span className="w-6" />
+                    )}
+                    <span className={isDirectMatch || !visibleHierarchyIds ? '' : 'text-muted-foreground'}>
+                      {item.title}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{ti.label}</Badge></TableCell>
                 <TableCell>{item.category || '-'}</TableCell><TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
                 <TableCell><DropdownMenu onOpenChange={(open) => { if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); } }}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}><DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleOpenDialog(null, item.id)}><Plus className="h-4 w-4 mr-2" />Sous-contenu</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
+                  </DropdownMenuContent></DropdownMenu></TableCell>
               </TableRow>);
             })}</TableBody></Table>
         </div>
@@ -259,6 +358,22 @@ const ContentPage = () => {
               <div className="space-y-2"><Label>Contenu</Label><Textarea value={formData.body} onChange={e => setFormData({...formData, body: e.target.value})} rows={6} placeholder="Contenu complet..." /></div>
               <div className="space-y-2"><Label>Lien / URL source</Label><Input type="url" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} placeholder="https://..." data-testid="content-url-input" /></div>
               <div className="space-y-2"><Label>Catégorie</Label><Input value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Cuisine, Électronique..." /></div>
+              <div className="space-y-2">
+                <Label>Contenu parent</Label>
+                <Select value={formData.parent_id || '__root__'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === '__root__' ? '' : v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucun parent (racine)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__root__">Aucun parent (racine)</SelectItem>
+                    {parentCandidates.map((candidate) => (
+                      <SelectItem key={candidate.id} value={candidate.id}>
+                        {candidate.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2"><Label>Tags</Label>
                 <div className="flex gap-2"><Input value={newTag} list="content-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
                 <datalist id="content-tag-suggestions">{allTags.map(t => <option key={t.name} value={t.name} />)}</datalist>
