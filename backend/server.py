@@ -3437,15 +3437,9 @@ def _normalize_link_item_type(item_type: str) -> str:
     value = (item_type or "").strip().lower()
     return aliases.get(value, value)
 
-@api_router.post("/links")
-async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_user)):
-    """Create a bidirectional link between two items"""
-    user_id = user["id"]
-    
-    source_type = _normalize_link_item_type(data.source_type)
-    target_type = _normalize_link_item_type(data.target_type)
 
-    collection_map = {
+def _linkable_collections_map():
+    return {
         "collection": db.collections,
         "inventory": db.inventory,
         "wishlist": db.wishlist,
@@ -3455,8 +3449,18 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
         "note": db.notes,
         "portfolio": db.portfolio,
         "portfolio_physical": db.portfolio_v2_physical_assets,
-        "alert": db.alerts
+        "alert": db.alerts,
     }
+
+@api_router.post("/links")
+async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_user)):
+    """Create a bidirectional link between two items"""
+    user_id = user["id"]
+    
+    source_type = _normalize_link_item_type(data.source_type)
+    target_type = _normalize_link_item_type(data.target_type)
+
+    collection_map = _linkable_collections_map()
     
     if source_type not in collection_map or target_type not in collection_map:
         raise HTTPException(status_code=400, detail="Type d'item invalide")
@@ -3526,37 +3530,22 @@ async def unlink_items(
     source_type = _normalize_link_item_type(source_type)
     target_type = _normalize_link_item_type(target_type)
 
-    collection_map = {
-        "collection": db.collections,
-        "inventory": db.inventory,
-        "wishlist": db.wishlist,
-        "project": db.projects,
-        "task": db.tasks,
-        "content": db.content,
-        "note": db.notes,
-        "portfolio": db.portfolio,
-        "portfolio_physical": db.portfolio_v2_physical_assets,
-        "alert": db.alerts
-    }
-    
-    source_col = collection_map.get(source_type)
-    target_col = collection_map.get(target_type)
-    
-    if source_col is None or target_col is None:
-        raise HTTPException(status_code=400, detail="Type d'item invalide")
-    
+    collection_map = _linkable_collections_map()
     now = datetime.now(timezone.utc).isoformat()
-    
-    # Remove link from both items
-    await source_col.update_one(
-        {"id": source_id, "user_id": user_id},
-        {"$pull": {"links": {"item_id": target_id}}, "$set": {"updated_at": now}}
-    )
-    
-    await target_col.update_one(
-        {"id": target_id, "user_id": user_id},
-        {"$pull": {"links": {"item_id": source_id}}, "$set": {"updated_at": now}}
-    )
+
+    # Robust unlink for all item types:
+    # remove source->target and target->source in every linkable collection
+    # so legacy/plural type mismatches or stale item_type values do not block deletion.
+    unique_cols = list({id(col): col for col in collection_map.values()}.values())
+    for col in unique_cols:
+        await col.update_one(
+            {"id": source_id, "user_id": user_id},
+            {"$pull": {"links": {"item_id": target_id}}, "$set": {"updated_at": now}},
+        )
+        await col.update_one(
+            {"id": target_id, "user_id": user_id},
+            {"$pull": {"links": {"item_id": source_id}}, "$set": {"updated_at": now}},
+        )
     
     return {"message": "Lien supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
@@ -3567,18 +3556,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     
     item_type = _normalize_link_item_type(item_type)
 
-    collection_map = {
-        "collection": db.collections,
-        "inventory": db.inventory,
-        "wishlist": db.wishlist,
-        "project": db.projects,
-        "task": db.tasks,
-        "content": db.content,
-        "note": db.notes,
-        "portfolio": db.portfolio,
-        "portfolio_physical": db.portfolio_v2_physical_assets,
-        "alert": db.alerts
-    }
+    collection_map = _linkable_collections_map()
     
     if item_type not in collection_map:
         raise HTTPException(status_code=400, detail="Type d'item invalide")
