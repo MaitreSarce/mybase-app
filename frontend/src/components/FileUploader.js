@@ -19,6 +19,7 @@ import {
   Download,
   Trash2,
   Link2,
+  Pencil,
   Eye,
   EyeOff,
   Plus,
@@ -165,6 +166,23 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
     }
   };
 
+  const handleRename = async (media) => {
+    const currentName = media.title || media.original_name || media.url || '';
+    const nextName = window.prompt('Nouveau nom du média :', currentName);
+    if (nextName === null) return;
+    const cleaned = nextName.trim();
+    if (!cleaned || cleaned === currentName) return;
+
+    try {
+      await mediaApi.update(media.id, { title: cleaned });
+      toast.success('Média renommé');
+      await fetchMedia();
+      if (onUpdate) onUpdate();
+    } catch {
+      toast.error('Erreur renommage média');
+    }
+  };
+
   const getFileIcon = (media, resolvedUrl = '') => {
     if (isImageMedia(media, resolvedUrl)) return FileImage;
     if (isVideoMedia(media, resolvedUrl)) return FileVideo;
@@ -288,6 +306,9 @@ const FileUploader = ({ itemType, itemId, onUpdate }) => {
                       <Download className="h-4 w-4" />
                     </Button>
                   )}
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRename(media)} title="Renommer">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleTogglePreview(media)}>
                     {media.preview_on_card ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </Button>
