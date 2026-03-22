@@ -81,8 +81,12 @@ export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtre
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-2" align="start">
-        <div className="max-h-60 overflow-y-auto space-y-1">
+      <PopoverContent className="w-64 p-2 max-h-[70vh]" align="start">
+        <div
+          className="max-h-[55vh] overflow-y-auto pr-1 space-y-1"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {hierarchical
             ? options.map((opt) => renderOption(opt))
             : options.map(opt => (
