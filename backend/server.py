@@ -3534,29 +3534,53 @@ async def unlink_items(
     now = datetime.now(timezone.utc).isoformat()
 
     # Robust unlink for all item types:
-    # remove source->target and target->source in every linkable collection,
-    # including legacy link shapes (item_id/id/target_id/source_id).
+    # rebuild links arrays in Python to safely handle legacy shapes.
     unique_cols = list({id(col): col for col in collection_map.values()}.values())
 
-    def _legacy_link_pull_for(other_id: str):
-        return {
-            "$or": [
-                {"item_id": other_id},
-                {"id": other_id},
-                {"target_id": other_id},
-                {"source_id": other_id},
-            ]
-        }
+    def _extract_linked_id(link_obj: Dict[str, Any]) -> Optional[str]:
+        if not isinstance(link_obj, dict):
+            return None
+        val = (
+            link_obj.get("item_id")
+            or link_obj.get("id")
+            or link_obj.get("target_id")
+            or link_obj.get("source_id")
+        )
+        return str(val) if val is not None else None
+
+    def _remove_links_to(links: Any, other_id: str) -> List[Dict[str, Any]]:
+        if not isinstance(links, list):
+            return []
+        target = str(other_id)
+        result = []
+        for link in links:
+            linked_id = _extract_linked_id(link)
+            if linked_id == target:
+                continue
+            if isinstance(link, dict):
+                result.append(link)
+        return result
 
     for col in unique_cols:
-        await col.update_one(
-            {"id": source_id, "user_id": user_id},
-            {"$pull": {"links": _legacy_link_pull_for(target_id)}, "$set": {"updated_at": now}},
-        )
-        await col.update_one(
-            {"id": target_id, "user_id": user_id},
-            {"$pull": {"links": _legacy_link_pull_for(source_id)}, "$set": {"updated_at": now}},
-        )
+        source_doc = await col.find_one({"id": source_id, "user_id": user_id}, {"_id": 0, "links": 1})
+        if source_doc is not None:
+            old_links = source_doc.get("links", [])
+            new_links = _remove_links_to(old_links, target_id)
+            if new_links != old_links:
+                await col.update_one(
+                    {"id": source_id, "user_id": user_id},
+                    {"$set": {"links": new_links, "updated_at": now}},
+                )
+
+        target_doc = await col.find_one({"id": target_id, "user_id": user_id}, {"_id": 0, "links": 1})
+        if target_doc is not None:
+            old_links = target_doc.get("links", [])
+            new_links = _remove_links_to(old_links, source_id)
+            if new_links != old_links:
+                await col.update_one(
+                    {"id": target_id, "user_id": user_id},
+                    {"$set": {"links": new_links, "updated_at": now}},
+                )
     
     return {"message": "Lien supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
 
