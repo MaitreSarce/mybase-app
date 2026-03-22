@@ -1,15 +1,16 @@
-﻿import { useState } from 'react';
-import { Badge } from './ui/badge';
+import { useState } from 'react';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from './ui/popover';
 import { Checkbox } from './ui/checkbox';
-import { ChevronDown, ChevronRight, Filter, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Filter, Search, X } from 'lucide-react';
 
 export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtrer', testId = '', hierarchical = false }) => {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState({});
+  const [query, setQuery] = useState('');
 
   const toggle = (value) => {
     if (selected.includes(value)) {
@@ -27,6 +28,25 @@ export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtre
   const toggleExpanded = (value) => {
     setExpanded((prev) => ({ ...prev, [value]: !prev[value] }));
   };
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filterHierarchicalOptions = (list) => {
+    if (!normalizedQuery) return list;
+    return list
+      .map((opt) => {
+        const children = Array.isArray(opt.children) ? filterHierarchicalOptions(opt.children) : [];
+        const label = String(opt.label || '').toLowerCase();
+        const selfMatch = label.includes(normalizedQuery);
+        if (!selfMatch && children.length === 0) return null;
+        return { ...opt, children };
+      })
+      .filter(Boolean);
+  };
+
+  const visibleOptions = hierarchical
+    ? filterHierarchicalOptions(options)
+    : options.filter((opt) => String(opt.label || '').toLowerCase().includes(normalizedQuery));
 
   const renderOption = (opt, depth = 0) => {
     const children = Array.isArray(opt.children) ? opt.children : [];
@@ -69,7 +89,7 @@ export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtre
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(''); }}>
       <PopoverTrigger asChild>
         <Button variant="outline" className="h-9 gap-2 text-sm" data-testid={testId}>
           <Filter className="h-3.5 w-3.5" />
@@ -82,14 +102,26 @@ export const MultiSelect = ({ options, selected, onChange, placeholder = 'Filtre
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2 max-h-[70vh]" align="start">
+        <div className="mb-2 relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher..."
+            className="h-8 pl-8 text-sm"
+          />
+        </div>
+
         <div
           className="max-h-[55vh] overflow-y-auto pr-1 space-y-1"
           onWheel={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
         >
-          {hierarchical
-            ? options.map((opt) => renderOption(opt))
-            : options.map(opt => (
+          {visibleOptions.length === 0 ? (
+            <p className="text-xs text-muted-foreground px-2 py-1">Aucun résultat</p>
+          ) : hierarchical
+            ? visibleOptions.map((opt) => renderOption(opt))
+            : visibleOptions.map(opt => (
               <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary/50 cursor-pointer text-sm">
                 <Checkbox checked={selected.includes(opt.value)} onCheckedChange={() => toggle(opt.value)} />
                 {opt.color && <div className={`w-2 h-2 rounded-full ${opt.color}`} />}
