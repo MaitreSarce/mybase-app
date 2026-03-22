@@ -3425,11 +3425,26 @@ class LinkItemsRequest(BaseModel):
     target_id: str
     label: Optional[str] = None
 
+
+def _normalize_link_item_type(item_type: str) -> str:
+    aliases = {
+        "collections": "collection",
+        "projects": "project",
+        "tasks": "task",
+        "notes": "note",
+        "alerts": "alert",
+    }
+    value = (item_type or "").strip().lower()
+    return aliases.get(value, value)
+
 @api_router.post("/links")
 async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_user)):
     """Create a bidirectional link between two items"""
     user_id = user["id"]
     
+    source_type = _normalize_link_item_type(data.source_type)
+    target_type = _normalize_link_item_type(data.target_type)
+
     collection_map = {
         "collection": db.collections,
         "inventory": db.inventory,
@@ -3437,17 +3452,18 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
+        "note": db.notes,
         "portfolio": db.portfolio,
         "portfolio_physical": db.portfolio_v2_physical_assets,
         "alert": db.alerts
     }
     
-    if data.source_type not in collection_map or data.target_type not in collection_map:
+    if source_type not in collection_map or target_type not in collection_map:
         raise HTTPException(status_code=400, detail="Type d'item invalide")
     
     # Verify both items exist
-    source_col = collection_map[data.source_type]
-    target_col = collection_map[data.target_type]
+    source_col = collection_map[source_type]
+    target_col = collection_map[target_type]
     
     source_item = await source_col.find_one({"id": data.source_id, "user_id": user_id})
     target_item = await target_col.find_one({"id": data.target_id, "user_id": user_id})
@@ -3464,7 +3480,7 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
     # Add link to source -> target
     source_link = {
         "item_id": data.target_id,
-        "item_type": data.target_type,
+        "item_type": target_type,
         "item_name": target_name,
         "label": data.label,
         "created_at": now
@@ -3473,7 +3489,7 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
     # Add link to target -> source (bidirectional)
     target_link = {
         "item_id": data.source_id,
-        "item_type": data.source_type,
+        "item_type": source_type,
         "item_name": source_name,
         "label": data.label,
         "created_at": now
@@ -3481,12 +3497,12 @@ async def link_items(data: LinkItemsRequest, user: dict = Depends(get_current_us
     
     # Update both items
     await source_col.update_one(
-        {"id": data.source_id},
+        {"id": data.source_id, "user_id": user_id},
         {"$push": {"links": source_link}, "$set": {"updated_at": now}}
     )
     
     await target_col.update_one(
-        {"id": data.target_id},
+        {"id": data.target_id, "user_id": user_id},
         {"$push": {"links": target_link}, "$set": {"updated_at": now}}
     )
     
@@ -3507,6 +3523,9 @@ async def unlink_items(
     """Remove a link between two items"""
     user_id = user["id"]
     
+    source_type = _normalize_link_item_type(source_type)
+    target_type = _normalize_link_item_type(target_type)
+
     collection_map = {
         "collection": db.collections,
         "inventory": db.inventory,
@@ -3514,6 +3533,7 @@ async def unlink_items(
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
+        "note": db.notes,
         "portfolio": db.portfolio,
         "portfolio_physical": db.portfolio_v2_physical_assets,
         "alert": db.alerts
@@ -3545,6 +3565,8 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     """Get all links for an item with full details"""
     user_id = user["id"]
     
+    item_type = _normalize_link_item_type(item_type)
+
     collection_map = {
         "collection": db.collections,
         "inventory": db.inventory,
@@ -3552,6 +3574,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
         "project": db.projects,
         "task": db.tasks,
         "content": db.content,
+        "note": db.notes,
         "portfolio": db.portfolio,
         "portfolio_physical": db.portfolio_v2_physical_assets,
         "alert": db.alerts
@@ -3571,7 +3594,7 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     # Enrich links with current item details
     enriched_links = []
     for link in links:
-        linked_col = collection_map.get(link.get("item_type"))
+        linked_col = collection_map.get(_normalize_link_item_type(link.get("item_type")))
         if linked_col is not None:
             linked_item = await linked_col.find_one(
                 {"id": link["item_id"], "user_id": user_id},
