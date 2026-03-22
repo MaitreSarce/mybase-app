@@ -3534,17 +3534,28 @@ async def unlink_items(
     now = datetime.now(timezone.utc).isoformat()
 
     # Robust unlink for all item types:
-    # remove source->target and target->source in every linkable collection
-    # so legacy/plural type mismatches or stale item_type values do not block deletion.
+    # remove source->target and target->source in every linkable collection,
+    # including legacy link shapes (item_id/id/target_id/source_id).
     unique_cols = list({id(col): col for col in collection_map.values()}.values())
+
+    def _legacy_link_pull_for(other_id: str):
+        return {
+            "$or": [
+                {"item_id": other_id},
+                {"id": other_id},
+                {"target_id": other_id},
+                {"source_id": other_id},
+            ]
+        }
+
     for col in unique_cols:
         await col.update_one(
             {"id": source_id, "user_id": user_id},
-            {"$pull": {"links": {"item_id": target_id}}, "$set": {"updated_at": now}},
+            {"$pull": {"links": _legacy_link_pull_for(target_id)}, "$set": {"updated_at": now}},
         )
         await col.update_one(
             {"id": target_id, "user_id": user_id},
-            {"$pull": {"links": {"item_id": source_id}}, "$set": {"updated_at": now}},
+            {"$pull": {"links": _legacy_link_pull_for(source_id)}, "$set": {"updated_at": now}},
         )
     
     return {"message": "Lien supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
@@ -3572,15 +3583,25 @@ async def get_item_links(item_type: str, item_id: str, user: dict = Depends(get_
     # Enrich links with current item details
     enriched_links = []
     for link in links:
+        linked_item_id = (
+            link.get("item_id")
+            or link.get("id")
+            or link.get("target_id")
+            or link.get("source_id")
+        )
+        if not linked_item_id:
+            continue
+
         linked_col = collection_map.get(_normalize_link_item_type(link.get("item_type")))
         if linked_col is not None:
             linked_item = await linked_col.find_one(
-                {"id": link["item_id"], "user_id": user_id},
+                {"id": linked_item_id, "user_id": user_id},
                 {"_id": 0, "name": 1, "title": 1, "description": 1, "id": 1}
             )
             if linked_item:
                 enriched_links.append({
                     **link,
+                    "item_id": linked_item_id,
                     "item_name": linked_item.get("name") or linked_item.get("title") or linked_item.get("item_name") or "Sans nom",
                     "item_description": linked_item.get("description", "")
                 })
