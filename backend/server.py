@@ -233,6 +233,33 @@ class WishlistItemResponse(BaseModel):
     created_at: str
     updated_at: str
 
+# Asset WatchList Models
+class AssetWatchlistCreate(BaseModel):
+    ticker: str
+    buy_target: Optional[float] = None
+    sell_target: Optional[float] = None
+    owned: bool = False
+    link: Optional[str] = None
+
+class AssetWatchlistUpdate(BaseModel):
+    ticker: Optional[str] = None
+    buy_target: Optional[float] = None
+    sell_target: Optional[float] = None
+    owned: Optional[bool] = None
+    link: Optional[str] = None
+
+class AssetWatchlistResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    ticker: str
+    buy_target: Optional[float] = None
+    sell_target: Optional[float] = None
+    owned: bool = False
+    link: Optional[str] = None
+    created_at: str
+    updated_at: str
+
 # Project/Task Models
 class TaskCreate(BaseModel):
     title: str
@@ -824,6 +851,75 @@ async def delete_wishlist_item(item_id: str, user: dict = Depends(get_current_us
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item non trouvÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©")
     return {"message": "Item supprimÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"}
+
+# ==================== ASSET WATCHLIST ROUTES ====================
+
+@api_router.post("/asset-watchlist", response_model=AssetWatchlistResponse)
+async def create_asset_watchlist_item(data: AssetWatchlistCreate, user: dict = Depends(get_current_user)):
+    item_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    doc = {
+        "id": item_id,
+        "user_id": user["id"],
+        "ticker": data.ticker.strip().upper(),
+        "buy_target": data.buy_target,
+        "sell_target": data.sell_target,
+        "owned": bool(data.owned),
+        "link": data.link,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    await db.asset_watchlist.insert_one(doc)
+    doc.pop("_id", None)
+    return AssetWatchlistResponse(**doc)
+
+
+@api_router.get("/asset-watchlist", response_model=List[AssetWatchlistResponse])
+async def get_asset_watchlist_items(user: dict = Depends(get_current_user), owned: Optional[bool] = None, search: Optional[str] = None):
+    query: Dict[str, Any] = {"user_id": user["id"]}
+    if owned is not None:
+        query["owned"] = owned
+    if search:
+        query["ticker"] = {"$regex": search, "$options": "i"}
+
+    items = await db.asset_watchlist.find(query, {"_id": 0}).sort("ticker", 1).to_list(2000)
+    return [AssetWatchlistResponse(**item) for item in items]
+
+
+@api_router.get("/asset-watchlist/{item_id}", response_model=AssetWatchlistResponse)
+async def get_asset_watchlist_item(item_id: str, user: dict = Depends(get_current_user)):
+    item = await db.asset_watchlist.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item non trouve")
+    return AssetWatchlistResponse(**item)
+
+
+@api_router.put("/asset-watchlist/{item_id}", response_model=AssetWatchlistResponse)
+async def update_asset_watchlist_item(item_id: str, data: AssetWatchlistUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "ticker" in update_data:
+        update_data["ticker"] = str(update_data["ticker"]).strip().upper()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await db.asset_watchlist.find_one_and_update(
+        {"id": item_id, "user_id": user["id"]},
+        {"$set": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Item non trouve")
+    result.pop("_id", None)
+    return AssetWatchlistResponse(**result)
+
+
+@api_router.delete("/asset-watchlist/{item_id}")
+async def delete_asset_watchlist_item(item_id: str, user: dict = Depends(get_current_user)):
+    result = await db.asset_watchlist.delete_one({"id": item_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Item non trouve")
+    return {"message": "Item supprime"}
 
 # ==================== PROJECTS/TASKS ROUTES ====================
 

@@ -113,6 +113,15 @@ export const portfolioApi = {
   delete: (id) => api.delete(`/portfolio/${id}`),
 };
 
+// Asset WatchList API
+export const assetWatchlistApi = {
+  getAll: (params) => api.get('/asset-watchlist', { params }),
+  get: (id) => api.get(`/asset-watchlist/${id}`),
+  create: (data) => api.post('/asset-watchlist', data),
+  update: (id, data) => api.put(`/asset-watchlist/${id}`, data),
+  delete: (id) => api.delete(`/asset-watchlist/${id}`),
+};
+
 // Dashboard API
 export const dashboardApi = {
   getStats: () => api.get('/dashboard/stats'),

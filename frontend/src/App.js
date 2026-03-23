@@ -10,6 +10,7 @@ import WishlistPage from "./pages/WishlistPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ContentPage from "./pages/ContentPage";
 import PortfolioPage from "./pages/PortfolioPage";
+import AssetWatchlistPage from "./pages/AssetWatchlistPage";
 import AlertsPage from "./pages/AlertsPage";
 import TagsPage from "./pages/TagsPage";
 import MindmapPage from "./pages/MindmapPage";
@@ -82,6 +83,7 @@ function App() {
             <Route path="content" element={<ContentPage />} />
             <Route path="notes" element={<NotesPage />} />
             <Route path="portfolio" element={<PortfolioPage />} />
+            <Route path="asset-watchlist" element={<AssetWatchlistPage />} />
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="mindmap" element={<MindmapPage />} />
