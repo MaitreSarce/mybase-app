@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
-import { contentApi, tagsApi } from '../services/api';
+import { contentApi, tagsApi, mediaApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -22,7 +22,8 @@ import {
 } from '../components/ui/table';
 import {
   Plus, MoreVertical, Pencil, Trash2, BookOpen, Loader2,
-  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink, ChevronDown, ChevronRight, CornerDownRight
+  Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink, ChevronDown, ChevronRight, CornerDownRight,
+  ArrowLeft, ArrowRight, Image as ImageIcon
 } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
@@ -52,6 +53,11 @@ const ContentPage = () => {
   const [customType, setCustomType] = useState('');
   const [collapsedHierarchy, setCollapsedHierarchy] = useState({});
   const [hierarchyFilterContents, setHierarchyFilterContents] = useState([]);
+  const [contentMedia, setContentMedia] = useState([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [captionDraft, setCaptionDraft] = useState('');
+  const [savingCaption, setSavingCaption] = useState(false);
   const [formData, setFormData] = useState({
     title: '', content_type: 'recipe', description: '', body: '', tags: [], category: '', parent_id: ''
   });
@@ -96,6 +102,21 @@ const ContentPage = () => {
     setDialogOpen(true);
   };
 
+  useEffect(() => {
+    if (!dialogOpen || !editingItem?.id) {
+      setContentMedia([]);
+      setActiveMediaIndex(0);
+      setCaptionDraft('');
+      return;
+    }
+    loadContentMedia(editingItem.id);
+  }, [dialogOpen, editingItem?.id]);
+
+  useEffect(() => {
+    const active = contentMedia[activeMediaIndex];
+    setCaptionDraft(active?.title || '');
+  }, [activeMediaIndex, contentMedia]);
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
     const payload = { ...formData, parent_id: formData.parent_id || null };
@@ -109,6 +130,36 @@ const ContentPage = () => {
   const handleDelete = async (item) => {
     try { await contentApi.delete(item.id); toast.success(`"${item.title}" supprimé`); fetchData(); }
     catch { toast.error('Erreur'); }
+  };
+
+  const handlePrevMedia = () => {
+    if (contentMedia.length < 2) return;
+    setActiveMediaIndex((prev) => (prev - 1 + contentMedia.length) % contentMedia.length);
+  };
+
+  const handleNextMedia = () => {
+    if (contentMedia.length < 2) return;
+    setActiveMediaIndex((prev) => (prev + 1) % contentMedia.length);
+  };
+
+  const handleSaveCaption = async () => {
+    const active = contentMedia[activeMediaIndex];
+    if (!active) return;
+    const nextTitle = captionDraft.trim();
+    const currentTitle = String(active.title || '').trim();
+    if (nextTitle === currentTitle) return;
+
+    setSavingCaption(true);
+    try {
+      await mediaApi.update(active.id, { title: nextTitle || null });
+      toast.success('Texte média mis à jour');
+      if (editingItem?.id) await loadContentMedia(editingItem.id);
+      await fetchData();
+    } catch {
+      toast.error('Erreur mise à jour texte média');
+    } finally {
+      setSavingCaption(false);
+    }
   };
 
   const handleAddCustomType = () => {
@@ -144,6 +195,52 @@ const ContentPage = () => {
   const isDocumentPreview = (attachment) => {
     const mime = String(attachment?.mime_type || '').toLowerCase();
     return mime.includes('pdf') || mime.includes('sheet') || mime.includes('excel') || mime.includes('word') || mime.includes('csv') || isDocumentUrl(attachment?.url);
+  };
+
+  const resolveMediaUrl = (media) => {
+    if (!media) return null;
+    if (media.kind === 'link') return media.url || null;
+    if (media.access_url) return `${(process.env.REACT_APP_BACKEND_URL || '')}${media.access_url}`;
+    if (media.url) return media.url;
+    if (media.filename) return `${(process.env.REACT_APP_BACKEND_URL || '')}/uploads/${media.filename}`;
+    return null;
+  };
+
+  const isImageMedia = (media, url) => {
+    const mime = String(media?.mime_type || '');
+    if (mime.startsWith('image/')) return true;
+    return isImageUrl(url || media?.url);
+  };
+
+  const isVideoMedia = (media, url) => {
+    const mime = String(media?.mime_type || '');
+    if (mime.startsWith('video/')) return true;
+    return isVideoUrl(url || media?.url) || Boolean(getVideoEmbedUrl(url || media?.url));
+  };
+
+  const loadContentMedia = async (contentId) => {
+    if (!contentId) {
+      setContentMedia([]);
+      setActiveMediaIndex(0);
+      setCaptionDraft('');
+      return;
+    }
+    setMediaLoading(true);
+    try {
+      const res = await mediaApi.list({ item_type: 'content', item_id: contentId });
+      const medias = res.data || [];
+      setContentMedia(medias);
+      setActiveMediaIndex(0);
+      const first = medias[0];
+      setCaptionDraft(first?.title || '');
+    } catch {
+      toast.error('Erreur chargement medias du contenu');
+      setContentMedia([]);
+      setActiveMediaIndex(0);
+      setCaptionDraft('');
+    } finally {
+      setMediaLoading(false);
+    }
   };
 
   const getChildren = (parentId) => items.filter((it) => it.parent_id === parentId);
@@ -253,6 +350,11 @@ const ContentPage = () => {
     })
     .filter(Boolean);
   const parentContentOpts = pruneContentOptions(contentFilterOpts);
+  const activeMedia = contentMedia[activeMediaIndex] || null;
+  const activeMediaUrl = resolveMediaUrl(activeMedia);
+  const activeMediaIsImage = activeMedia && activeMediaUrl ? isImageMedia(activeMedia, activeMediaUrl) : false;
+  const activeMediaIsVideo = activeMedia && activeMediaUrl ? isVideoMedia(activeMedia, activeMediaUrl) : false;
+  const activeMediaEmbedUrl = activeMedia?.kind === 'link' && activeMediaUrl ? getVideoEmbedUrl(activeMediaUrl) : null;
 
   if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /></div>;
 
@@ -448,8 +550,91 @@ const ContentPage = () => {
                 <datalist id="content-tag-suggestions">{allTags.map(t => <option key={t.name} value={t.name} />)}</datalist>
                 {formData.tags.length > 0 && <div className="flex flex-wrap gap-2 mt-2">{formData.tags.map(t => <Badge key={t} variant="secondary" className="gap-1">{t}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(t)} /></Badge>)}</div>}
               </div>
+              {editingItem && (
+                <div className="space-y-3 rounded-lg border border-border/60 p-3 bg-muted/10">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      Médias du contenu
+                    </Label>
+                    {mediaLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  </div>
+
+                  {!mediaLoading && contentMedia.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun média lié à ce contenu.</p>
+                  ) : (
+                    <>
+                      {activeMedia && (
+                        <div className="space-y-3">
+                          <div className="relative rounded-md border border-border/40 bg-secondary/20 p-2">
+                            {contentMedia.length > 1 && (
+                              <>
+                                <Button type="button" variant="secondary" size="icon" className="absolute left-2 top-1/2 -translate-y-1/2 z-10" onClick={handlePrevMedia}>
+                                  <ArrowLeft className="h-4 w-4" />
+                                </Button>
+                                <Button type="button" variant="secondary" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 z-10" onClick={handleNextMedia}>
+                                  <ArrowRight className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+
+                            {activeMediaIsImage && (
+                              <img src={activeMediaUrl} alt={activeMedia.title || activeMedia.original_name || 'media'} className="w-full h-52 object-contain rounded-md" />
+                            )}
+                            {!activeMediaIsImage && activeMediaIsVideo && (
+                              activeMediaEmbedUrl ? (
+                                <iframe src={activeMediaEmbedUrl} title={activeMedia.title || 'video'} className="w-full h-52 rounded-md border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                              ) : (
+                                <video src={activeMediaUrl} className="w-full h-52 rounded-md" controls preload="metadata" />
+                              )
+                            )}
+                            {!activeMediaIsImage && !activeMediaIsVideo && (
+                              <div className="h-52 rounded-md border border-border/40 bg-secondary/20 flex items-center justify-center text-muted-foreground text-sm">
+                                Aperçu indisponible pour ce type de média
+                              </div>
+                            )}
+                          </div>
+
+                          {contentMedia.length > 1 && (
+                            <div className="flex items-center justify-center gap-1">
+                              {contentMedia.map((m, idx) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  className={`h-2.5 w-2.5 rounded-full ${idx === activeMediaIndex ? 'bg-primary' : 'bg-muted-foreground/40'}`}
+                                  aria-label={`Média ${idx + 1}`}
+                                  onClick={() => setActiveMediaIndex(idx)}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <Label>Texte sous le média (légende)</Label>
+                            <Textarea
+                              value={captionDraft}
+                              onChange={(e) => setCaptionDraft(e.target.value)}
+                              placeholder="Ajoutez un texte descriptif pour ce média..."
+                              rows={3}
+                            />
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-muted-foreground">
+                                Média {Math.min(activeMediaIndex + 1, contentMedia.length)} / {contentMedia.length}
+                              </p>
+                              <Button type="button" size="sm" onClick={handleSaveCaption} disabled={savingCaption}>
+                                {savingCaption && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                Enregistrer le texte
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {editingItem && <ItemLinksManager itemType="content" itemId={editingItem.id} itemName={editingItem.title} onUpdate={fetchData} />}
-              {editingItem && <FileUploader itemType="content" itemId={editingItem.id} onUpdate={fetchData} />}
+              {editingItem && <FileUploader itemType="content" itemId={editingItem.id} onUpdate={async () => { await fetchData(); await loadContentMedia(editingItem.id); }} />}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
