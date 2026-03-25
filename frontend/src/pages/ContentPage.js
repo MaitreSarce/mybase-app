@@ -23,7 +23,7 @@ import {
 import {
   Plus, MoreVertical, Pencil, Trash2, BookOpen, Loader2,
   Search, ChefHat, Wrench, GraduationCap, Video, X, FileText, ExternalLink, ChevronDown, ChevronRight, CornerDownRight,
-  ArrowLeft, ArrowRight, Image as ImageIcon
+  ArrowLeft, ArrowRight, Image as ImageIcon, Expand
 } from 'lucide-react';
 import { MultiSelect } from '../components/MultiSelect';
 import { ViewToggle } from '../components/ViewToggle';
@@ -58,6 +58,7 @@ const ContentPage = () => {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [captionDraft, setCaptionDraft] = useState('');
   const [savingCaption, setSavingCaption] = useState(false);
+  const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: '', content_type: 'recipe', description: '', body: '', tags: [], category: '', parent_id: ''
   });
@@ -579,13 +580,34 @@ const ContentPage = () => {
                             )}
 
                             {activeMediaIsImage && (
-                              <img src={activeMediaUrl} alt={activeMedia.title || activeMedia.original_name || 'media'} className="w-full h-52 object-contain rounded-md" />
+                              <button
+                                type="button"
+                                className="w-full"
+                                onClick={() => setMediaPreviewOpen(true)}
+                                title="Ouvrir en grand"
+                              >
+                                <img src={activeMediaUrl} alt={activeMedia.title || activeMedia.original_name || 'media'} className="w-full h-52 object-contain rounded-md" />
+                              </button>
                             )}
                             {!activeMediaIsImage && activeMediaIsVideo && (
                               activeMediaEmbedUrl ? (
-                                <iframe src={activeMediaEmbedUrl} title={activeMedia.title || 'video'} className="w-full h-52 rounded-md border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                                <button
+                                  type="button"
+                                  className="w-full"
+                                  onClick={() => setMediaPreviewOpen(true)}
+                                  title="Ouvrir en grand"
+                                >
+                                  <iframe src={activeMediaEmbedUrl} title={activeMedia.title || 'video'} className="w-full h-52 rounded-md border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                                </button>
                               ) : (
-                                <video src={activeMediaUrl} className="w-full h-52 rounded-md" controls preload="metadata" />
+                                <button
+                                  type="button"
+                                  className="w-full"
+                                  onClick={() => setMediaPreviewOpen(true)}
+                                  title="Ouvrir en grand"
+                                >
+                                  <video src={activeMediaUrl} className="w-full h-52 rounded-md" controls preload="metadata" />
+                                </button>
                               )
                             )}
                             {!activeMediaIsImage && !activeMediaIsVideo && (
@@ -593,20 +615,79 @@ const ContentPage = () => {
                                 Aperçu indisponible pour ce type de média
                               </div>
                             )}
+                            {activeMedia && (
+                              <div className="absolute top-3 right-3">
+                                <Button type="button" variant="secondary" size="sm" onClick={() => setMediaPreviewOpen(true)}>
+                                  <Expand className="h-4 w-4 mr-1" />
+                                  Agrandir
+                                </Button>
+                              </div>
+                            )}
                           </div>
 
                           {contentMedia.length > 1 && (
-                            <div className="flex items-center justify-center gap-1">
-                              {contentMedia.map((m, idx) => (
-                                <button
-                                  key={m.id}
-                                  type="button"
-                                  className={`h-2.5 w-2.5 rounded-full ${idx === activeMediaIndex ? 'bg-primary' : 'bg-muted-foreground/40'}`}
-                                  aria-label={`Média ${idx + 1}`}
-                                  onClick={() => setActiveMediaIndex(idx)}
-                                />
-                              ))}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-center gap-1">
+                                {contentMedia.map((m, idx) => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    className={`h-2.5 w-2.5 rounded-full ${idx === activeMediaIndex ? 'bg-primary' : 'bg-muted-foreground/40'}`}
+                                    aria-label={`Média ${idx + 1}`}
+                                    onClick={() => setActiveMediaIndex(idx)}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {contentMedia.map((m, idx) => {
+                                  const thumbUrl = resolveMediaUrl(m);
+                                  const thumbIsImage = m && thumbUrl ? isImageMedia(m, thumbUrl) : false;
+                                  return (
+                                    <button
+                                      key={`${m.id}-thumb`}
+                                      type="button"
+                                      onClick={() => setActiveMediaIndex(idx)}
+                                      className={`h-14 w-20 shrink-0 rounded border ${idx === activeMediaIndex ? 'border-primary' : 'border-border/40'} bg-secondary/20`}
+                                      title={m.title || m.original_name || `Media ${idx + 1}`}
+                                    >
+                                      {thumbIsImage ? (
+                                        <img src={thumbUrl} alt={m.title || 'media'} className="h-full w-full object-cover rounded" />
+                                      ) : (
+                                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground px-1">Media {idx + 1}</div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
+                          )}
+
+                          {activeMedia && (
+                            <Dialog open={mediaPreviewOpen} onOpenChange={setMediaPreviewOpen}>
+                              <DialogContent className="sm:max-w-[90vw] max-h-[90vh] overflow-hidden">
+                                <DialogHeader>
+                                  <DialogTitle>{activeMedia.title || activeMedia.original_name || 'Média'}</DialogTitle>
+                                  <DialogDescription>Aperçu en grand format</DialogDescription>
+                                </DialogHeader>
+                                <div className="rounded-md border border-border/40 bg-secondary/10 p-2">
+                                  {activeMediaIsImage && activeMediaUrl && (
+                                    <img src={activeMediaUrl} alt={activeMedia.title || 'media'} className="w-full max-h-[70vh] object-contain rounded-md" />
+                                  )}
+                                  {!activeMediaIsImage && activeMediaIsVideo && activeMediaUrl && (
+                                    activeMediaEmbedUrl ? (
+                                      <iframe src={activeMediaEmbedUrl} title={activeMedia.title || 'video'} className="w-full h-[70vh] rounded-md border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                                    ) : (
+                                      <video src={activeMediaUrl} className="w-full max-h-[70vh] rounded-md" controls preload="metadata" />
+                                    )
+                                  )}
+                                  {!activeMediaIsImage && !activeMediaIsVideo && (
+                                    <div className="h-[40vh] rounded-md border border-border/40 bg-secondary/20 flex items-center justify-center text-muted-foreground text-sm">
+                                      Aperçu indisponible pour ce type de média
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
                           )}
 
                           <div className="space-y-2">
