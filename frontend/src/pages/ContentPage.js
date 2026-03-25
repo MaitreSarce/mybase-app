@@ -669,7 +669,32 @@ const ContentPage = () => {
                                   <DialogTitle>{activeMedia.title || activeMedia.original_name || 'Média'}</DialogTitle>
                                   <DialogDescription>Aperçu en grand format</DialogDescription>
                                 </DialogHeader>
-                                <div className="rounded-md border border-border/40 bg-secondary/10 p-2">
+                                {contentMedia.length > 1 && (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={handlePrevMedia}>
+                                      <ArrowLeft className="h-4 w-4 mr-1" />
+                                      Précédent
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">
+                                      Média {Math.min(activeMediaIndex + 1, contentMedia.length)} / {contentMedia.length}
+                                    </p>
+                                    <Button type="button" variant="outline" size="sm" onClick={handleNextMedia}>
+                                      Suivant
+                                      <ArrowRight className="h-4 w-4 ml-1" />
+                                    </Button>
+                                  </div>
+                                )}
+                                <div className="relative rounded-md border border-border/40 bg-secondary/10 p-2">
+                                  {contentMedia.length > 1 && (
+                                    <>
+                                      <Button type="button" variant="secondary" size="icon" className="absolute left-3 top-1/2 -translate-y-1/2 z-10" onClick={handlePrevMedia}>
+                                        <ArrowLeft className="h-4 w-4" />
+                                      </Button>
+                                      <Button type="button" variant="secondary" size="icon" className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={handleNextMedia}>
+                                        <ArrowRight className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
                                   {activeMediaIsImage && activeMediaUrl && (
                                     <img src={activeMediaUrl} alt={activeMedia.title || 'media'} className="w-full max-h-[70vh] object-contain rounded-md" />
                                   )}
@@ -685,6 +710,12 @@ const ContentPage = () => {
                                       Aperçu indisponible pour ce type de média
                                     </div>
                                   )}
+                                </div>
+                                <div className="rounded-md border border-border/40 bg-muted/20 p-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Commentaire du média</p>
+                                  <p className="text-sm whitespace-pre-wrap">
+                                    {captionDraft?.trim() || activeMedia.title || 'Aucun commentaire pour ce média'}
+                                  </p>
                                 </div>
                               </DialogContent>
                             </Dialog>
