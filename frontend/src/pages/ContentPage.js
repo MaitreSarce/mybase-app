@@ -504,8 +504,8 @@ const ContentPage = () => {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <form onSubmit={handleSubmit}>
+        <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+          <form onSubmit={handleSubmit} className="min-w-0">
             <DialogHeader><DialogTitle>{editingItem ? 'Modifier le contenu' : 'Nouveau contenu'}</DialogTitle><DialogDescription>Gérez votre contenu</DialogDescription></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2"><Label>Titre *</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required data-testid="content-title-input" /></div>
@@ -515,7 +515,7 @@ const ContentPage = () => {
                   <SelectTrigger data-testid="content-type-select"><SelectValue /></SelectTrigger>
                   <SelectContent>{allContentTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
-                <div className="flex gap-2 mt-1">
+                <div className="flex flex-col sm:flex-row gap-2 mt-1 min-w-0">
                   <Input value={customType} onChange={e => setCustomType(e.target.value)} placeholder="Nouveau type (ex: podcast, article...)"
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleAddCustomType(); } }} data-testid="content-custom-type-input" className="flex-1" />
                   <Button type="button" variant="secondary" size="sm" onClick={handleAddCustomType} data-testid="add-custom-type-btn"><Plus className="h-4 w-4" /></Button>
@@ -527,18 +527,20 @@ const ContentPage = () => {
               <div className="space-y-2"><Label>Catégorie</Label><Input value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Cuisine, Électronique..." /></div>
               <div className="space-y-2">
                 <Label>Contenu parent</Label>
-                <div className="flex items-center gap-2">
-                  <MultiSelect
-                    options={parentContentOpts}
-                    selected={formData.parent_id ? [formData.parent_id] : []}
-                    onChange={(values) => {
-                      const next = values.length ? values[values.length - 1] : '';
-                      setFormData({ ...formData, parent_id: next });
-                    }}
-                    placeholder="Contenu parent"
-                    testId="content-parent-select"
-                    hierarchical
-                  />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <MultiSelect
+                      options={parentContentOpts}
+                      selected={formData.parent_id ? [formData.parent_id] : []}
+                      onChange={(values) => {
+                        const next = values.length ? values[values.length - 1] : '';
+                        setFormData({ ...formData, parent_id: next });
+                      }}
+                      placeholder="Contenu parent"
+                      testId="content-parent-select"
+                      hierarchical
+                    />
+                  </div>
                   {formData.parent_id && (
                     <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({ ...formData, parent_id: '' })}>
                       Racine
@@ -547,7 +549,7 @@ const ContentPage = () => {
                 </div>
               </div>
               <div className="space-y-2"><Label>Tags</Label>
-                <div className="flex gap-2"><Input value={newTag} list="content-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
+                <div className="flex flex-col sm:flex-row gap-2 min-w-0"><Input value={newTag} list="content-tag-suggestions" onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Tag..." /><Button type="button" variant="secondary" onClick={addTag}><Plus className="h-4 w-4" /></Button></div>
                 <datalist id="content-tag-suggestions">{allTags.map(t => <option key={t.name} value={t.name} />)}</datalist>
                 {formData.tags.length > 0 && <div className="flex flex-wrap gap-2 mt-2">{formData.tags.map(t => <Badge key={t} variant="secondary" className="gap-1">{t}<X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(t)} /></Badge>)}</div>}
               </div>
