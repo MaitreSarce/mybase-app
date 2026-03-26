@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { contentApi, tagsApi, mediaApi } from '../services/api';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -54,6 +55,8 @@ const ContentPage = () => {
     title: '', body: '', url: '', tags: [], parent_id: ''
   });
   const dropdownActionRef = useRef(false);
+  const processedEditIdRef = useRef(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => { fetchData(); }, []);
 
@@ -80,6 +83,20 @@ const ContentPage = () => {
     }
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (loading) return;
+    const editId = searchParams.get('editId');
+    if (!editId || processedEditIdRef.current === editId) return;
+    const target = items.find((it) => it.id === editId);
+    if (!target) return;
+    processedEditIdRef.current = editId;
+    handleOpenDialog(target);
+    const next = new URLSearchParams(searchParams);
+    next.delete('editId');
+    next.delete('editType');
+    setSearchParams(next, { replace: true });
+  }, [loading, items, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!dialogOpen || !editingItem?.id) {
@@ -214,18 +231,30 @@ const ContentPage = () => {
   const getChildren = (parentId) => items.filter((it) => it.parent_id === parentId);
   const rootItems = items.filter((it) => !it.parent_id);
   const currentContentNavParentId = contentNavPath.length ? contentNavPath[contentNavPath.length - 1] : null;
+  const currentContentNavNode = currentContentNavParentId
+    ? items.find((it) => it.id === currentContentNavParentId) || null
+    : null;
+  const isContentNavLeaf = !!currentContentNavNode && getChildren(currentContentNavNode.id).length === 0;
   const contentNavItems = items.filter((it) => (currentContentNavParentId ? it.parent_id === currentContentNavParentId : !it.parent_id));
   const contentNavBreadcrumb = contentNavPath
     .map((id) => items.find((it) => it.id === id))
     .filter(Boolean);
   const LEVEL_COLOR_CLASSES = [
-    'bg-blue-300/12',
-    'bg-orange-300/12',
-    'bg-green-300/12',
-    'bg-violet-300/12',
-    'bg-yellow-300/12',
+    'bg-blue-500/18',
+    'bg-orange-500/18',
+    'bg-green-500/18',
+    'bg-violet-500/18',
+    'bg-yellow-500/18',
+  ];
+  const LEVEL_ACCENT_CLASSES = [
+    'border-l-4 border-blue-400/80 bg-blue-500/12',
+    'border-l-4 border-orange-400/80 bg-orange-500/12',
+    'border-l-4 border-green-400/80 bg-green-500/12',
+    'border-l-4 border-violet-400/80 bg-violet-500/12',
+    'border-l-4 border-yellow-300/80 bg-yellow-500/12',
   ];
   const getLevelBgClass = (depth) => LEVEL_COLOR_CLASSES[depth % LEVEL_COLOR_CLASSES.length];
+  const getLevelAccentClass = (depth) => LEVEL_ACCENT_CLASSES[depth % LEVEL_ACCENT_CLASSES.length];
 
   useEffect(() => {
     if (!items.length || Object.keys(collapsedHierarchy).length > 0) return;
@@ -466,7 +495,7 @@ const ContentPage = () => {
                   const isDirectMatch = filteredItemIds.has(item.id);
                   return (<TableRow key={item.id} className={`cursor-pointer hover:bg-secondary/30 ${getLevelBgClass(depth)}`} onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
+                      <div className={`flex items-center gap-2 rounded-md px-2 py-1 ${getLevelAccentClass(depth)}`} style={{ paddingLeft: `${depth * 20}px` }}>
                         {depth > 0 && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground" />}
                         {hasChildren ? (
                           <Button
@@ -536,7 +565,87 @@ const ContentPage = () => {
             </div>
           </div>
 
-          {contentNavItems.length === 0 ? (
+          {isContentNavLeaf && currentContentNavNode ? (
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="truncate">{currentContentNavNode.title}</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Vue détaillée du dernier niveau</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => handleOpenDialog(currentContentNavNode)}>
+                    Modifier
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(() => {
+                  const preview = getPreviewAttachment(currentContentNavNode);
+                  const url = previewUrl(preview);
+                  if (!url) return null;
+                  if (isImagePreview(preview)) {
+                    return <img src={url} alt={currentContentNavNode.title} className="w-full max-h-72 rounded-md object-cover border border-border/40" />;
+                  }
+                  if (isVideoPreview(preview)) {
+                    const embedUrl = getVideoEmbedUrl(url);
+                    return embedUrl ? (
+                      <iframe src={embedUrl} title={currentContentNavNode.title} className="w-full h-72 rounded-md border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                    ) : (
+                      <video src={url} className="w-full max-h-72 rounded-md border border-border/40" controls preload="metadata" />
+                    );
+                  }
+                  if (isDocumentPreview(preview)) {
+                    return (
+                      <div className="w-full rounded-md border border-border/40 bg-secondary/20 p-3 flex items-center gap-3">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
+                          <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                {currentContentNavNode.body && (
+                  <div className="rounded-md border border-border/40 bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Contenu</p>
+                    <p className="text-sm whitespace-pre-wrap">{currentContentNavNode.body}</p>
+                  </div>
+                )}
+                {currentContentNavNode.url && (
+                  <a
+                    href={currentContentNavNode.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Ouvrir la source
+                  </a>
+                )}
+                {currentContentNavNode.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {currentContentNavNode.tags.map((tag) => (
+                      <Badge key={`${currentContentNavNode.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>
+                    ))}
+                  </div>
+                )}
+                {(currentContentNavNode.attachments || []).length > 1 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">Médias liés</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {(currentContentNavNode.attachments || []).map((att, idx) => {
+                        const src = previewUrl(att);
+                        if (!src || !isImagePreview(att)) return null;
+                        return <img key={`${currentContentNavNode.id}-att-${idx}`} src={src} alt={att?.title || currentContentNavNode.title} className="h-24 w-full rounded-md object-cover border border-border/40" />;
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : contentNavItems.length === 0 ? (
             <Card className="bg-card border-border border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
@@ -550,7 +659,6 @@ const ContentPage = () => {
                 const childCount = getChildren(item.id).length;
                 const preview = getPreviewAttachment(item);
                 const url = previewUrl(preview);
-                const canDrill = childCount > 0;
                 return (
                   <Card key={`nav-content-${item.id}`} className="bg-card border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
                     <CardHeader className="pb-3">
@@ -590,9 +698,9 @@ const ContentPage = () => {
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => (canDrill ? setContentNavPath((prev) => [...prev, item.id]) : handleOpenDialog(item))}
+                          onClick={() => setContentNavPath((prev) => [...prev, item.id])}
                         >
-                          {canDrill ? 'Ouvrir le niveau' : 'Ouvrir'}
+                          Ouvrir
                         </Button>
                       </div>
                     </CardContent>

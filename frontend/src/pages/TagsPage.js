@@ -1,22 +1,16 @@
 import { useState, useEffect } from 'react';
-import { tagsApi, inventoryApi, wishlistApi, contentApi, projectsApi, tasksApi } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { tagsApi } from '../services/api';
 import { toast } from 'sonner';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
 import { Skeleton } from '../components/ui/skeleton';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '../components/ui/dialog';
 import { MultiSelect } from '../components/MultiSelect';
 import {
   Hash, ArrowLeft, Package, Heart, BookOpen, FolderKanban,
-  CheckSquare, TrendingUp, Loader2
+  CheckSquare, TrendingUp
 } from 'lucide-react';
-import ItemLinksManager from '../components/ItemLinksManager';
 
 const SOURCE_LABELS = {
   inventory: { label: 'Inventaire', icon: Package },
@@ -27,26 +21,14 @@ const SOURCE_LABELS = {
   tasks: { label: 'Taches', icon: CheckSquare },
 };
 
-const apiMap = {
-  inventory: inventoryApi,
-  wishlist: wishlistApi,
-  content: contentApi,
-  projects: projectsApi,
-  tasks: tasksApi,
-};
-
 const TagsPage = () => {
+  const navigate = useNavigate();
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterSources, setFilterSources] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [tagItems, setTagItems] = useState(null);
   const [tagItemsLoading, setTagItemsLoading] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [editingType, setEditingType] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => { fetchTags(); }, []);
 
@@ -68,27 +50,30 @@ const TagsPage = () => {
     finally { setTagItemsLoading(false); }
   };
 
-  const handleOpenEdit = (item, type) => {
-    setEditingItem(item);
-    setEditingType(type);
-    const name = item.name || item.title || '';
-    setEditForm({ name, description: item.description || '' });
-    setEditDialogOpen(true);
-  };
-
-  const handleSubmitEdit = async (e) => {
-    e.preventDefault();
-    setEditSaving(true);
-    try {
-      const apiType = editingType === 'projects' ? 'projects' : editingType;
-      const nameField = (editingType === 'content' || editingType === 'tasks') ? 'title' : 'name';
-      const data = { [nameField]: editForm.name, description: editForm.description };
-      await apiMap[apiType].update(editingItem.id, data);
-      toast.success('Item mis a jour');
-      setEditDialogOpen(false);
-      handleSelectTag(selectedTag);
-    } catch (err) { toast.error(err.response?.data?.detail || 'Erreur'); }
-    finally { setEditSaving(false); }
+  const handleOpenItemEditPage = (item, sourceType) => {
+    if (!item?.id) return;
+    if (sourceType === 'inventory') {
+      navigate(`/inventory?editId=${encodeURIComponent(item.id)}`);
+      return;
+    }
+    if (sourceType === 'wishlist') {
+      navigate(`/wishlist?editId=${encodeURIComponent(item.id)}`);
+      return;
+    }
+    if (sourceType === 'content') {
+      navigate(`/content?editId=${encodeURIComponent(item.id)}`);
+      return;
+    }
+    if (sourceType === 'projects' || sourceType === 'tasks') {
+      navigate(`/projects?editType=${encodeURIComponent(sourceType)}&editId=${encodeURIComponent(item.id)}`);
+      return;
+    }
+    if (sourceType === 'portfolio') {
+      navigate('/portfolio');
+      toast.info('Ouverture du portefeuille. L’édition directe depuis Tags n’est pas encore disponible pour ce type.');
+      return;
+    }
+    toast.info('Type d’item non pris en charge pour l’ouverture directe.');
   };
 
   const filtered = filterSources.length === 0
@@ -147,7 +132,7 @@ const TagsPage = () => {
                   {items.map(item => (
                     <Card key={item.id}
                       className="bg-card border-border card-hover cursor-pointer"
-                      onClick={() => handleOpenEdit(item, sourceType)}
+                      onClick={() => handleOpenItemEditPage(item, sourceType)}
                       data-testid={`tag-item-${item.id}`}>
                       <CardContent className="py-3">
                         <p className="font-medium">{getItemName(item)}</p>
@@ -167,35 +152,6 @@ const TagsPage = () => {
           })
         )}
 
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSubmitEdit}>
-              <DialogHeader>
-                <DialogTitle>Modifier l'element</DialogTitle>
-                <DialogDescription>{SOURCE_LABELS[editingType]?.label || editingType}</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Nom *</Label>
-                  <Input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} required data-testid="tag-edit-name" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} />
-                </div>
-                {editingItem && editingType && apiMap[editingType] && (
-                  <ItemLinksManager itemType={editingType} itemId={editingItem.id} itemName={getItemName(editingItem)} onUpdate={() => handleSelectTag(selectedTag)} />
-                )}
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>Annuler</Button>
-                <Button type="submit" disabled={editSaving} data-testid="tag-edit-submit">
-                  {editSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Mettre a jour
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
       </div>
     );
   }

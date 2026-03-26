@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { projectsApi, tasksApi, tagsApi } from '../services/api';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -66,14 +67,24 @@ const ProjectsPage = () => {
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
   const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
   const dropdownActionRef = useRef(false);
+  const processedEditRef = useRef('');
+  const [searchParams, setSearchParams] = useSearchParams();
   const LEVEL_COLOR_CLASSES = [
-    'bg-blue-300/12',
-    'bg-orange-300/12',
-    'bg-green-300/12',
-    'bg-violet-300/12',
-    'bg-yellow-300/12',
+    'bg-blue-500/18',
+    'bg-orange-500/18',
+    'bg-green-500/18',
+    'bg-violet-500/18',
+    'bg-yellow-500/18',
+  ];
+  const LEVEL_ACCENT_CLASSES = [
+    'border-l-4 border-blue-400/80 bg-blue-500/12',
+    'border-l-4 border-orange-400/80 bg-orange-500/12',
+    'border-l-4 border-green-400/80 bg-green-500/12',
+    'border-l-4 border-violet-400/80 bg-violet-500/12',
+    'border-l-4 border-yellow-300/80 bg-yellow-500/12',
   ];
   const getLevelBgClass = (depth) => LEVEL_COLOR_CLASSES[depth % LEVEL_COLOR_CLASSES.length];
+  const getLevelAccentClass = (depth) => LEVEL_ACCENT_CLASSES[depth % LEVEL_ACCENT_CLASSES.length];
 
   const [projectForm, setProjectForm] = useState({
     name: '', description: '', color: 'blue', parent_id: '', tags: []
@@ -109,6 +120,34 @@ const ProjectsPage = () => {
     } catch { toast.error('Erreur lors du chargement'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (loading) return;
+    const editId = searchParams.get('editId');
+    const editType = searchParams.get('editType');
+    if (!editId || !editType) return;
+    const key = `${editType}:${editId}`;
+    if (processedEditRef.current === key) return;
+
+    if (editType === 'projects') {
+      const target = projects.find((p) => p.id === editId);
+      if (!target) return;
+      processedEditRef.current = key;
+      handleOpenProjectDialog(target);
+    } else if (editType === 'tasks') {
+      const target = tasks.find((t) => t.id === editId);
+      if (!target) return;
+      processedEditRef.current = key;
+      handleOpenTaskDialog(target);
+    } else {
+      return;
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('editId');
+    next.delete('editType');
+    setSearchParams(next, { replace: true });
+  }, [loading, projects, tasks, searchParams, setSearchParams]);
 
   const handleOpenProjectDialog = (project = null, parentId = null) => {
     if (project) {
@@ -276,7 +315,8 @@ const ProjectsPage = () => {
     return branch;
   };
 
-  const getProjectPreviewAttachment = (project) => (project?.attachments || []).find((a) => a?.preview_on_card) || null;
+  const getItemPreviewAttachment = (item) => (item?.attachments || []).find((a) => a?.preview_on_card) || null;
+  const getProjectPreviewAttachment = (project) => getItemPreviewAttachment(project);
   const projectPreviewUrl = (attachment) => {
     if (!attachment) return null;
     if (attachment.url) return attachment.url;
@@ -290,10 +330,20 @@ const ProjectsPage = () => {
     return /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(url);
   };
   const currentProjectNavParentId = projectNavPath.length ? projectNavPath[projectNavPath.length - 1] : null;
+  const currentProjectNavNode = currentProjectNavParentId
+    ? projects.find((p) => p.id === currentProjectNavParentId) || null
+    : null;
+  const isProjectNavLeaf = !!currentProjectNavNode && getChildren(currentProjectNavNode.id).length === 0;
   const projectNavItems = projects.filter((p) => (currentProjectNavParentId ? p.parent_id === currentProjectNavParentId : !p.parent_id));
   const projectNavBreadcrumb = projectNavPath
     .map((id) => projects.find((p) => p.id === id))
     .filter(Boolean);
+  const projectLeafTaskIds = currentProjectNavNode
+    ? [currentProjectNavNode.id, ...getDescendantProjectIds(currentProjectNavNode.id)]
+    : [];
+  const projectLeafTasks = currentProjectNavNode
+    ? tasks.filter((task) => projectLeafTaskIds.includes(task.project_id))
+    : [];
 
   useEffect(() => {
     if (!projectNavPath.length) return;
@@ -598,7 +648,7 @@ const ProjectsPage = () => {
                       return (
                         <TableRow key={`h-project-${project.id}-${index}`} className={`hover:bg-secondary/20 ${getLevelBgClass(row.depth)}`}>
                           <TableCell>
-                            <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
+                            <div className={`flex items-center gap-2 rounded-md px-2 py-1 ${getLevelAccentClass(row.depth)}`} style={{ paddingLeft: `${indent}px` }}>
                               {hasChildren ? (
                                 <Button
                                   type="button"
@@ -667,7 +717,7 @@ const ProjectsPage = () => {
                     return (
                       <TableRow key={`h-task-${task.id}-${index}`} className={`hover:bg-secondary/20 cursor-pointer ${getLevelBgClass(row.depth)}`} onClick={() => handleOpenTaskDialog(task)}>
                         <TableCell>
-                          <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
+                          <div className={`flex items-center gap-2 rounded-md px-2 py-1 ${getLevelAccentClass(row.depth)}`} style={{ paddingLeft: `${indent}px` }}>
                             <CornerDownRight className="h-4 w-4 text-muted-foreground" />
                             <span className={task.completed ? 'line-through text-muted-foreground' : ''}>{task.title}</span>
                           </div>
@@ -756,7 +806,90 @@ const ProjectsPage = () => {
             </div>
           </div>
 
-          {projectNavItems.length === 0 ? (
+          {isProjectNavLeaf && currentProjectNavNode ? (
+            <div className="space-y-4">
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <CardTitle className="truncate">{currentProjectNavNode.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Vue détaillée du dernier niveau
+                      </p>
+                    </div>
+                    <Badge variant="outline">{projectLeafTasks.length} tâche{projectLeafTasks.length > 1 ? 's' : ''}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(() => {
+                    const preview = getProjectPreviewAttachment(currentProjectNavNode);
+                    const previewSrc = projectPreviewUrl(preview);
+                    if (!previewSrc || !isImagePreview(preview)) return null;
+                    return <img src={previewSrc} alt={currentProjectNavNode.name} className="h-40 w-full rounded-md object-cover border border-border/40" />;
+                  })()}
+                  {currentProjectNavNode.description && (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{currentProjectNavNode.description}</p>
+                  )}
+                  {currentProjectNavNode.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {currentProjectNavNode.tags.map((tag) => (
+                        <Badge key={`${currentProjectNavNode.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleOpenProjectDialog(currentProjectNavNode)}>
+                      Modifier le projet
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => handleOpenTaskDialog(null, currentProjectNavNode.id)}>
+                      Nouvelle tâche
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {projectLeafTasks.length === 0 ? (
+                <Card className="bg-card border-border border-dashed">
+                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                    Aucune tâche sur ce niveau.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {projectLeafTasks.map((task) => {
+                    const priorityInfo = getPriorityInfo(task.priority);
+                    const preview = getItemPreviewAttachment(task);
+                    const previewSrc = projectPreviewUrl(preview);
+                    return (
+                      <Card key={`leaf-task-${task.id}`} className="bg-card border-border cursor-pointer hover:border-primary/40 transition-colors" onClick={() => handleOpenTaskDialog(task)}>
+                        <CardContent className="py-3 space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                {task.completed ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
+                                <p className={`font-medium ${task.completed ? 'line-through text-muted-foreground' : ''}`}>{task.title}</p>
+                              </div>
+                              {task.description && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
+                              )}
+                            </div>
+                            <div className={`mt-1 h-2.5 w-2.5 rounded-full ${priorityInfo.color}`} />
+                          </div>
+                          {previewSrc && isImagePreview(preview) && (
+                            <img src={previewSrc} alt={task.title} className="h-24 w-full rounded-md object-cover border border-border/30" />
+                          )}
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{priorityInfo.label}</span>
+                            <span>{task.due_date ? formatDate(task.due_date) : 'Sans échéance'}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : projectNavItems.length === 0 ? (
             <Card className="bg-card border-border border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
@@ -771,7 +904,6 @@ const ProjectsPage = () => {
                 const stats = getProjectAggregateStats(project.id);
                 const preview = getProjectPreviewAttachment(project);
                 const previewSrc = projectPreviewUrl(preview);
-                const canDrill = childCount > 0;
                 return (
                   <Card
                     key={`nav-project-${project.id}`}
@@ -809,10 +941,9 @@ const ProjectsPage = () => {
                         <Button
                           type="button"
                           size="sm"
-                          disabled={!canDrill}
-                          onClick={() => canDrill && setProjectNavPath((prev) => [...prev, project.id])}
+                          onClick={() => setProjectNavPath((prev) => [...prev, project.id])}
                         >
-                          {canDrill ? 'Ouvrir le niveau' : 'Fin'}
+                          Ouvrir
                         </Button>
                       </div>
                     </CardContent>

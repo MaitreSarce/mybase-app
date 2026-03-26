@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { wishlistApi, collectionsApi, tagsApi } from '../services/api';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -55,6 +56,8 @@ const WishlistPage = () => {
     priority: 3, tags: [], target_date: '', collection_id: ''
   });
   const dropdownActionRef = useRef(false);
+  const processedEditIdRef = useRef(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => { fetchData(); }, [showPurchased]);
 
@@ -80,6 +83,20 @@ const WishlistPage = () => {
     }
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (loading) return;
+    const editId = searchParams.get('editId');
+    if (!editId || processedEditIdRef.current === editId) return;
+    const target = items.find((it) => it.id === editId);
+    if (!target) return;
+    processedEditIdRef.current = editId;
+    handleOpenDialog(target);
+    const next = new URLSearchParams(searchParams);
+    next.delete('editId');
+    next.delete('editType');
+    setSearchParams(next, { replace: true });
+  }, [loading, items, searchParams, setSearchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
