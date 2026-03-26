@@ -210,7 +210,13 @@ const ContentPage = () => {
 
   const getChildren = (parentId) => items.filter((it) => it.parent_id === parentId);
   const rootItems = items.filter((it) => !it.parent_id);
-  const LEVEL_COLOR_CLASSES = ['bg-indigo-500/10', 'bg-cyan-500/10', 'bg-emerald-500/10', 'bg-amber-500/10', 'bg-fuchsia-500/10'];
+  const LEVEL_COLOR_CLASSES = [
+    'bg-blue-500/10',
+    'bg-orange-500/12',
+    'bg-green-500/10',
+    'bg-purple-500/12',
+    'bg-rose-500/12',
+  ];
   const getLevelBgClass = (depth) => LEVEL_COLOR_CLASSES[depth % LEVEL_COLOR_CLASSES.length];
 
   useEffect(() => {

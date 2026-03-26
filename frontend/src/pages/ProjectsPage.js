@@ -65,7 +65,13 @@ const ProjectsPage = () => {
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
   const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
   const dropdownActionRef = useRef(false);
-  const LEVEL_COLOR_CLASSES = ['bg-indigo-500/10', 'bg-cyan-500/10', 'bg-emerald-500/10', 'bg-amber-500/10', 'bg-fuchsia-500/10'];
+  const LEVEL_COLOR_CLASSES = [
+    'bg-blue-500/10',
+    'bg-orange-500/12',
+    'bg-green-500/10',
+    'bg-purple-500/12',
+    'bg-rose-500/12',
+  ];
   const getLevelBgClass = (depth) => LEVEL_COLOR_CLASSES[depth % LEVEL_COLOR_CLASSES.length];
 
   const [projectForm, setProjectForm] = useState({
