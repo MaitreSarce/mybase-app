@@ -17,6 +17,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Plus, MoreVertical, Pencil, Trash2, BookOpen, Loader2,
   Search, X, FileText, ExternalLink, ChevronDown, ChevronRight, CornerDownRight,
@@ -47,6 +48,8 @@ const ContentPage = () => {
   const [captionDraft, setCaptionDraft] = useState('');
   const [savingCaption, setSavingCaption] = useState(false);
   const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
+  const [contentTab, setContentTab] = useState('list');
+  const [contentNavPath, setContentNavPath] = useState([]);
   const [formData, setFormData] = useState({
     title: '', body: '', url: '', tags: [], parent_id: ''
   });
@@ -210,6 +213,11 @@ const ContentPage = () => {
 
   const getChildren = (parentId) => items.filter((it) => it.parent_id === parentId);
   const rootItems = items.filter((it) => !it.parent_id);
+  const currentContentNavParentId = contentNavPath.length ? contentNavPath[contentNavPath.length - 1] : null;
+  const contentNavItems = items.filter((it) => (currentContentNavParentId ? it.parent_id === currentContentNavParentId : !it.parent_id));
+  const contentNavBreadcrumb = contentNavPath
+    .map((id) => items.find((it) => it.id === id))
+    .filter(Boolean);
   const LEVEL_COLOR_CLASSES = [
     'bg-blue-300/12',
     'bg-orange-300/12',
@@ -304,6 +312,13 @@ const ContentPage = () => {
 
   const hierarchyRows = buildHierarchyRows();
 
+  useEffect(() => {
+    if (!contentNavPath.length) return;
+    const validIds = new Set(items.map((it) => it.id));
+    const cleaned = contentNavPath.filter((id) => validIds.has(id));
+    if (cleaned.length !== contentNavPath.length) setContentNavPath(cleaned);
+  }, [items, contentNavPath]);
+
   const toggleCollapse = (itemId) => {
     setCollapsedHierarchy((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
   };
@@ -345,137 +360,249 @@ const ContentPage = () => {
         <Button onClick={() => handleOpenDialog()} data-testid="add-content-btn"><Plus className="h-4 w-4 mr-2" />Nouveau contenu</Button>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
-        </div>
-        {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="filter-tags" />}
-        <MultiSelect
-          options={contentFilterOpts}
-          selected={hierarchyFilterContents}
-          onChange={setHierarchyFilterContents}
-          placeholder="Contenus"
-          testId="content-hierarchy-filter"
-          hierarchical
-        />
-        {hierarchyFilterContents.length > 0 && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => setHierarchyFilterContents([])}>
-            Réinitialiser
-          </Button>
-        )}
-        {view === 'table' && (
-          <>
-            <Button type="button" variant="outline" size="sm" onClick={expandAllHierarchy}>
-              Tout déplier
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={collapseAllHierarchy}>
-              Tout replier
-            </Button>
-          </>
-        )}
-        <ViewToggle view={view} onChange={setView} />
-      </div>
+      <Tabs value={contentTab} onValueChange={setContentTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="list">Liste</TabsTrigger>
+          <TabsTrigger value="navigation">Navigation</TabsTrigger>
+        </TabsList>
 
-      {filteredItems.length === 0 ? (
-        <Card className="bg-card border-border border-dashed"><CardContent className="flex flex-col items-center justify-center py-12">
-          <BookOpen className="h-12 w-12 text-muted-foreground mb-4" /><h3 className="text-lg font-medium">Aucun contenu</h3></CardContent></Card>
-      ) : view === 'card' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredItems.map(item => {
-            return (
-              <Card key={item.id} className="bg-card border-border card-hover group" data-testid={`content-card-${item.id}`}>
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => handleOpenDialog(item)}>
-                    <div className="flex-1 min-w-0"><CardTitle className="text-lg truncate">{item.title}</CardTitle></div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                      <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </CardHeader>
-                <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
-                  {(() => {
-                    const preview = getPreviewAttachment(item);
-                    const url = previewUrl(preview);
-                    if (!url) return null;
-                    if (isImagePreview(preview)) {
-                      return <img src={url} alt={item.title} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" />;
-                    }
-                    if (isVideoPreview(preview)) {
-                      const embedUrl = getVideoEmbedUrl(url);
-                      return embedUrl ? (
-                        <iframe src={embedUrl} title={item.title} className="w-full h-32 rounded-md mb-2 border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
-                      ) : (
-                        <video src={url} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" controls preload="metadata" />
-                      );
-                    }
-                    if (isDocumentPreview(preview)) {
-                      return (
-                        <div className="w-full h-32 rounded-md mb-2 border border-border/40 bg-secondary/20 flex items-center gap-3 px-3">
-                          <FileText className="h-8 w-8 text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
-                            <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
-                          </div>
+        <TabsContent value="list" className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input type="search" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
+            </div>
+            {tagOpts.length > 0 && <MultiSelect options={tagOpts} selected={filterTags} onChange={setFilterTags} placeholder="Tags" testId="filter-tags" />}
+            <MultiSelect
+              options={contentFilterOpts}
+              selected={hierarchyFilterContents}
+              onChange={setHierarchyFilterContents}
+              placeholder="Contenus"
+              testId="content-hierarchy-filter"
+              hierarchical
+            />
+            {hierarchyFilterContents.length > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setHierarchyFilterContents([])}>
+                Réinitialiser
+              </Button>
+            )}
+            {view === 'table' && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={expandAllHierarchy}>
+                  Tout déplier
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={collapseAllHierarchy}>
+                  Tout replier
+                </Button>
+              </>
+            )}
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+
+          {filteredItems.length === 0 ? (
+            <Card className="bg-card border-border border-dashed"><CardContent className="flex flex-col items-center justify-center py-12">
+              <BookOpen className="h-12 w-12 text-muted-foreground mb-4" /><h3 className="text-lg font-medium">Aucun contenu</h3></CardContent></Card>
+          ) : view === 'card' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredItems.map(item => {
+                return (
+                  <Card key={item.id} className="bg-card border-border card-hover group" data-testid={`content-card-${item.id}`}>
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                      <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => handleOpenDialog(item)}>
+                        <div className="flex-1 min-w-0"><CardTitle className="text-lg truncate">{item.title}</CardTitle></div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                          <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardHeader>
+                    <CardContent className="cursor-pointer" onClick={() => handleOpenDialog(item)}>
+                      {(() => {
+                        const preview = getPreviewAttachment(item);
+                        const url = previewUrl(preview);
+                        if (!url) return null;
+                        if (isImagePreview(preview)) {
+                          return <img src={url} alt={item.title} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" />;
+                        }
+                        if (isVideoPreview(preview)) {
+                          const embedUrl = getVideoEmbedUrl(url);
+                          return embedUrl ? (
+                            <iframe src={embedUrl} title={item.title} className="w-full h-32 rounded-md mb-2 border border-border/40" allow="autoplay; encrypted-media; picture-in-picture" />
+                          ) : (
+                            <video src={url} className="w-full h-32 object-cover rounded-md mb-2 border border-border/40" controls preload="metadata" />
+                          );
+                        }
+                        if (isDocumentPreview(preview)) {
+                          return (
+                            <div className="w-full h-32 rounded-md mb-2 border border-border/40 bg-secondary/20 flex items-center gap-3 px-3">
+                              <FileText className="h-8 w-8 text-muted-foreground" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{getDocumentLabel(preview)}</p>
+                                <p className="text-xs text-muted-foreground truncate">{preview?.title || preview?.original_name || preview?.url}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
+                      {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"><ExternalLink className="h-3 w-3" />{item.url.replace(/^https?:\/\//, '').substring(0, 40)}</a>}
+                      {item.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{item.tags.slice(0, 3).map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}</div>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <Table><TableHeader><TableRow><TableHead>Titre</TableHead><TableHead>Tags</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                <TableBody>{hierarchyRows.map(({ item, depth }) => {
+                  const children = getChildren(item.id);
+                  const hasChildren = children.length > 0;
+                  const isCollapsed = !!collapsedHierarchy[item.id];
+                  const isDirectMatch = filteredItemIds.has(item.id);
+                  return (<TableRow key={item.id} className={`cursor-pointer hover:bg-secondary/30 ${getLevelBgClass(depth)}`} onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
+                        {depth > 0 && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                        {hasChildren ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={(e) => { e.stopPropagation(); toggleCollapse(item.id); }}
+                            title={isCollapsed ? 'Déplier' : 'Replier'}
+                          >
+                            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </Button>
+                        ) : (
+                          <span className="w-6" />
+                        )}
+                        <span className={isDirectMatch || !visibleHierarchyIds ? '' : 'text-muted-foreground'}>
+                          {item.title}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
+                    <TableCell><DropdownMenu onOpenChange={(open) => { if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); } }}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                        <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleOpenDialog(null, item.id)}><Plus className="h-4 w-4 mr-2" />Sous-contenu</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
+                      </DropdownMenuContent></DropdownMenu></TableCell>
+                  </TableRow>);
+                })}</TableBody></Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="navigation" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={contentNavPath.length === 0}
+              onClick={() => setContentNavPath((prev) => prev.slice(0, -1))}
+            >
+              Retour
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={contentNavPath.length === 0}
+              onClick={() => setContentNavPath([])}
+            >
+              Niveau 1
+            </Button>
+            <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+              <span>Racine</span>
+              {contentNavBreadcrumb.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                  onClick={() => setContentNavPath(contentNavPath.slice(0, idx + 1))}
+                >
+                  <ChevronRight className="h-3 w-3" />
+                  <span>{item.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {contentNavItems.length === 0 ? (
+            <Card className="bg-card border-border border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Aucun sous-contenu</h3>
+                <p className="text-sm text-muted-foreground">Ce niveau ne contient pas encore de carte enfant.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {contentNavItems.map((item) => {
+                const childCount = getChildren(item.id).length;
+                const preview = getPreviewAttachment(item);
+                const url = previewUrl(preview);
+                const canDrill = childCount > 0;
+                return (
+                  <Card key={`nav-content-${item.id}`} className="bg-card border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base truncate">{item.title}</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {childCount} sous-contenu{childCount > 1 ? 's' : ''}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {url && isImagePreview(preview) && (
+                        <img src={url} alt={item.title} className="h-28 w-full rounded-md object-cover border border-border/40" />
+                      )}
+                      {item.body && <p className="text-sm text-muted-foreground line-clamp-3">{item.body}</p>}
+                      {item.url && (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {item.url.replace(/^https?:\/\//, '').slice(0, 45)}
+                        </a>
+                      )}
+                      {item.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {item.tags.slice(0, 4).map((tag) => (
+                            <Badge key={`${item.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>
+                          ))}
                         </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {item.description && <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.description}</p>}
-                  {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"><ExternalLink className="h-3 w-3" />{item.url.replace(/^https?:\/\//, '').substring(0, 40)}</a>}
-                  {item.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{item.tags.slice(0, 3).map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}</div>}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table><TableHeader><TableRow><TableHead>Titre</TableHead><TableHead>Tags</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
-            <TableBody>{hierarchyRows.map(({ item, depth }) => {
-              const children = getChildren(item.id);
-              const hasChildren = children.length > 0;
-              const isCollapsed = !!collapsedHierarchy[item.id];
-              const isDirectMatch = filteredItemIds.has(item.id);
-              return (<TableRow key={item.id} className={`cursor-pointer hover:bg-secondary/30 ${getLevelBgClass(depth)}`} onClick={() => { if (!dropdownActionRef.current) handleOpenDialog(item); }}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
-                    {depth > 0 && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground" />}
-                    {hasChildren ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => { e.stopPropagation(); toggleCollapse(item.id); }}
-                        title={isCollapsed ? 'Déplier' : 'Replier'}
-                      >
-                        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-                    ) : (
-                      <span className="w-6" />
-                    )}
-                    <span className={isDirectMatch || !visibleHierarchyIds ? '' : 'text-muted-foreground'}>
-                      {item.title}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>{item.tags?.slice(0, 2).map(t => <Badge key={t} variant="secondary" className="text-xs mr-1">{t}</Badge>)}</TableCell>
-                <TableCell><DropdownMenu onOpenChange={(open) => { if (!open) { dropdownActionRef.current = true; setTimeout(() => { dropdownActionRef.current = false; }, 300); } }}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                    <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Pencil className="h-4 w-4 mr-2" />Modifier</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleOpenDialog(null, item.id)}><Plus className="h-4 w-4 mr-2" />Sous-contenu</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleDelete(item)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Supprimer</DropdownMenuItem>
-                  </DropdownMenuContent></DropdownMenu></TableCell>
-              </TableRow>);
-            })}</TableBody></Table>
-        </div>
-      )}
+                      )}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleOpenDialog(item)}>
+                          Modifier
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => (canDrill ? setContentNavPath((prev) => [...prev, item.id]) : handleOpenDialog(item))}
+                        >
+                          {canDrill ? 'Ouvrir le niveau' : 'Ouvrir'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden">

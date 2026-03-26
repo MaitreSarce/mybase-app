@@ -61,6 +61,7 @@ const ProjectsPage = () => {
   const [filterTags, setFilterTags] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('tasks');
+  const [projectNavPath, setProjectNavPath] = useState([]);
   const [newTaskTag, setNewTaskTag] = useState('');
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
   const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
@@ -274,6 +275,32 @@ const ProjectsPage = () => {
       .filter(Boolean);
     return branch;
   };
+
+  const getProjectPreviewAttachment = (project) => (project?.attachments || []).find((a) => a?.preview_on_card) || null;
+  const projectPreviewUrl = (attachment) => {
+    if (!attachment) return null;
+    if (attachment.url) return attachment.url;
+    if (attachment.filename) return `${(process.env.REACT_APP_BACKEND_URL || '')}/uploads/${attachment.filename}`;
+    return null;
+  };
+  const isImagePreview = (attachment) => {
+    const mime = String(attachment?.mime_type || '');
+    if (mime.startsWith('image/')) return true;
+    const url = String(attachment?.url || '');
+    return /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(url);
+  };
+  const currentProjectNavParentId = projectNavPath.length ? projectNavPath[projectNavPath.length - 1] : null;
+  const projectNavItems = projects.filter((p) => (currentProjectNavParentId ? p.parent_id === currentProjectNavParentId : !p.parent_id));
+  const projectNavBreadcrumb = projectNavPath
+    .map((id) => projects.find((p) => p.id === id))
+    .filter(Boolean);
+
+  useEffect(() => {
+    if (!projectNavPath.length) return;
+    const validIds = new Set(projects.map((p) => p.id));
+    const cleaned = projectNavPath.filter((id) => validIds.has(id));
+    if (cleaned.length !== projectNavPath.length) setProjectNavPath(cleaned);
+  }, [projects, projectNavPath]);
   const projectFilterOpts = buildProjectFilterOptions();
   const disallowedParentProjectIds = editingProject
     ? new Set([editingProject.id, ...getDescendantProjectIds(editingProject.id)])
@@ -420,6 +447,7 @@ const ProjectsPage = () => {
         <TabsList>
           <TabsTrigger value="tasks" data-testid="tasks-tab">Tâches</TabsTrigger>
           <TabsTrigger value="hierarchy" data-testid="hierarchy-tab">Arborescence</TabsTrigger>
+          <TabsTrigger value="navigation" data-testid="navigation-tab">Navigation</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tasks" className="space-y-4">
@@ -688,6 +716,109 @@ const ProjectsPage = () => {
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="navigation" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={projectNavPath.length === 0}
+              onClick={() => setProjectNavPath((prev) => prev.slice(0, -1))}
+            >
+              Retour
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={projectNavPath.length === 0}
+              onClick={() => setProjectNavPath([])}
+            >
+              Niveau 1
+            </Button>
+            <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+              <span>Racine</span>
+              {projectNavBreadcrumb.map((project, idx) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                  onClick={() => setProjectNavPath(projectNavPath.slice(0, idx + 1))}
+                >
+                  <ChevronRight className="h-3 w-3" />
+                  <span>{project.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {projectNavItems.length === 0 ? (
+            <Card className="bg-card border-border border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Aucun sous-projet</h3>
+                <p className="text-sm text-muted-foreground">Ce niveau ne contient pas de carte enfant.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {projectNavItems.map((project) => {
+                const childCount = getChildren(project.id).length;
+                const stats = getProjectAggregateStats(project.id);
+                const preview = getProjectPreviewAttachment(project);
+                const previewSrc = projectPreviewUrl(preview);
+                const canDrill = childCount > 0;
+                return (
+                  <Card
+                    key={`nav-project-${project.id}`}
+                    className="bg-card border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <CardTitle className="text-base truncate">{project.name}</CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {childCount} sous-projet{childCount > 1 ? 's' : ''} · {stats.completed}/{stats.total} tâches
+                          </p>
+                        </div>
+                        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${getColorClass(project.color)}`} />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {previewSrc && isImagePreview(preview) && (
+                        <img src={previewSrc} alt={project.name} className="h-28 w-full rounded-md object-cover border border-border/40" />
+                      )}
+                      {project.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-3">{project.description}</p>
+                      )}
+                      {project.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {project.tags.slice(0, 4).map((tag) => (
+                            <Badge key={`${project.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleOpenProjectDialog(project)}>
+                          Modifier
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!canDrill}
+                          onClick={() => canDrill && setProjectNavPath((prev) => [...prev, project.id])}
+                        >
+                          {canDrill ? 'Ouvrir le niveau' : 'Fin'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
