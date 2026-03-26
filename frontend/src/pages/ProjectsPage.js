@@ -65,6 +65,8 @@ const ProjectsPage = () => {
   const [hierarchyFilterProjects, setHierarchyFilterProjects] = useState([]);
   const [collapsedHierarchyProjects, setCollapsedHierarchyProjects] = useState({});
   const dropdownActionRef = useRef(false);
+  const LEVEL_COLOR_CLASSES = ['bg-indigo-500/10', 'bg-cyan-500/10', 'bg-emerald-500/10', 'bg-amber-500/10', 'bg-fuchsia-500/10'];
+  const getLevelBgClass = (depth) => LEVEL_COLOR_CLASSES[depth % LEVEL_COLOR_CLASSES.length];
 
   const [projectForm, setProjectForm] = useState({
     name: '', description: '', color: 'blue', parent_id: '', tags: []
@@ -75,6 +77,17 @@ const ProjectsPage = () => {
   });
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (!projects.length || Object.keys(collapsedHierarchyProjects).length > 0) return;
+    const next = {};
+    projects.forEach((project) => {
+      const hasChildrenProjects = getChildren(project.id).length > 0;
+      const hasDirectTasks = tasks.some((t) => t.project_id === project.id);
+      if (hasChildrenProjects || hasDirectTasks) next[project.id] = true;
+    });
+    setCollapsedHierarchyProjects(next);
+  }, [projects, tasks, collapsedHierarchyProjects]);
 
   const fetchData = async () => {
     try {
@@ -549,7 +562,7 @@ const ProjectsPage = () => {
                       const hasChildren = hasChildrenProjects || hasDirectTasks;
                       const isCollapsed = !!collapsedHierarchyProjects[project.id];
                       return (
-                        <TableRow key={`h-project-${project.id}-${index}`} className="hover:bg-secondary/20">
+                        <TableRow key={`h-project-${project.id}-${index}`} className={`hover:bg-secondary/20 ${getLevelBgClass(row.depth)}`}>
                           <TableCell>
                             <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
                               {hasChildren ? (
@@ -618,7 +631,7 @@ const ProjectsPage = () => {
 
                     const task = row.task;
                     return (
-                      <TableRow key={`h-task-${task.id}-${index}`} className="hover:bg-secondary/20 cursor-pointer" onClick={() => handleOpenTaskDialog(task)}>
+                      <TableRow key={`h-task-${task.id}-${index}`} className={`hover:bg-secondary/20 cursor-pointer ${getLevelBgClass(row.depth)}`} onClick={() => handleOpenTaskDialog(task)}>
                         <TableCell>
                           <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
                             <CornerDownRight className="h-4 w-4 text-muted-foreground" />

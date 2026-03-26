@@ -57,6 +57,16 @@ security = HTTPBearer()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def cleanup_legacy_content_fields():
+    """Remove deprecated content fields and related legacy custom types."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.content.update_many(
+        {},
+        {"$unset": {"content_type": "", "category": ""}, "$set": {"updated_at": now}},
+    )
+    await db.custom_types.delete_many({"category": "content"})
+
 # ==================== MODELS ====================
 
 # Auth Models
@@ -336,26 +346,20 @@ class ProjectResponse(BaseModel):
 # Content Models (Recipes, DIY, Tutorials)
 class ContentCreate(BaseModel):
     title: str
-    content_type: str  # recipe, diy, tutorial, educational
-    description: Optional[str] = None
     body: Optional[str] = None  # Markdown content
     url: Optional[str] = None
     tags: List[str] = []
     metadata: List[MetadataField] = []
     links: List[ItemLink] = []
-    category: Optional[str] = None
     parent_id: Optional[str] = None
 
 class ContentUpdate(BaseModel):
     title: Optional[str] = None
-    content_type: Optional[str] = None
-    description: Optional[str] = None
     body: Optional[str] = None
     url: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[List[MetadataField]] = None
     links: Optional[List[ItemLink]] = None
-    category: Optional[str] = None
     parent_id: Optional[str] = None
 
 class ContentResponse(BaseModel):
@@ -363,15 +367,12 @@ class ContentResponse(BaseModel):
     id: str
     user_id: str
     title: str
-    content_type: str
-    description: Optional[str] = None
     body: Optional[str] = None
     url: Optional[str] = None
     tags: List[str] = []
     metadata: List[Dict[str, Any]] = []
     links: List[Dict[str, Any]] = []
     attachments: List[Dict[str, Any]] = []
-    category: Optional[str] = None
     parent_id: Optional[str] = None
     created_at: str
     updated_at: str
@@ -1127,15 +1128,12 @@ async def create_content(data: ContentCreate, user: dict = Depends(get_current_u
         "id": content_id,
         "user_id": user["id"],
         "title": data.title,
-        "content_type": data.content_type,
-        "description": data.description,
         "body": data.body,
         "url": data.url,
         "tags": data.tags,
         "metadata": [m.model_dump() for m in data.metadata],
         "links": [l.model_dump() for l in data.links],
         "attachments": [],
-        "category": data.category,
         "parent_id": data.parent_id,
         "created_at": now,
         "updated_at": now
@@ -1148,15 +1146,9 @@ async def create_content(data: ContentCreate, user: dict = Depends(get_current_u
 @api_router.get("/content", response_model=List[ContentResponse])
 async def get_content_items(
     user: dict = Depends(get_current_user),
-    content_type: Optional[str] = None,
-    category: Optional[str] = None,
     search: Optional[str] = None
 ):
     query = {"user_id": user["id"]}
-    if content_type:
-        query["content_type"] = content_type
-    if category:
-        query["category"] = category
     if search:
         query["$or"] = [
             {"title": {"$regex": search, "$options": "i"}},
