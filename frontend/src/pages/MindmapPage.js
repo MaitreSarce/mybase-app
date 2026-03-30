@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, CardContent } from '../components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
@@ -78,6 +79,8 @@ const MindmapPage = () => {
   const [rawData, setRawData] = useState({ nodes: [], edges: [] });
   const [filterTypes, setFilterTypes] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
+  const [activeTab, setActiveTab] = useState('graph');
+  const [navPath, setNavPath] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
   const [layoutMode, setLayoutMode] = useState('tree');
   const [hierarchyOrder, setHierarchyOrder] = useState(HIERARCHY_PRESETS.projects_first.order);
@@ -95,6 +98,49 @@ const MindmapPage = () => {
     rawData.nodes.forEach(n => { map[n.id] = n.type; });
     return map;
   }, [rawData.nodes]);
+
+  const nodeById = useMemo(() => {
+    const map = {};
+    rawData.nodes.forEach((node) => { map[node.id] = node; });
+    return map;
+  }, [rawData.nodes]);
+
+  const adjacencyMap = useMemo(() => {
+    const map = new Map();
+    rawData.edges.forEach((edge) => {
+      if (!map.has(edge.source)) map.set(edge.source, new Set());
+      if (!map.has(edge.target)) map.set(edge.target, new Set());
+      map.get(edge.source).add(edge.target);
+      map.get(edge.target).add(edge.source);
+    });
+    return map;
+  }, [rawData.edges]);
+
+  const navRootNodes = useMemo(() => rawData.nodes
+    .filter((node) => {
+      if (node.type === 'collection') return true;
+      if (node.type === 'project' || node.type === 'content') return !node.parent_id;
+      return false;
+    })
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '')), [rawData.nodes]);
+
+  const currentNavNodeId = navPath.length ? navPath[navPath.length - 1] : null;
+  const currentNavNode = currentNavNodeId ? nodeById[currentNavNodeId] || null : null;
+  const navNeighborNodes = useMemo(() => {
+    if (!currentNavNodeId) return navRootNodes;
+    const neighbors = Array.from(adjacencyMap.get(currentNavNodeId) || []);
+    return neighbors
+      .map((id) => nodeById[id])
+      .filter(Boolean)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [adjacencyMap, currentNavNodeId, navRootNodes, nodeById]);
+
+  useEffect(() => {
+    if (!navPath.length) return;
+    const validIds = new Set(rawData.nodes.map((node) => node.id));
+    const cleaned = navPath.filter((id) => validIds.has(id));
+    if (cleaned.length !== navPath.length) setNavPath(cleaned);
+  }, [navPath, rawData.nodes]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -463,53 +509,149 @@ const MindmapPage = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center">
-        {Object.entries(TYPE_LABELS).map(([key, label]) => (
-          <Badge key={key} variant="outline" className="gap-1.5 text-xs">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[key] }} />{label}
-          </Badge>
-        ))}
-        {focusedNodeName && (
-          <Badge variant="secondary" className="gap-1.5 ml-4">
-            Focus: {focusedNodeName}
-            <X className="h-3 w-3 cursor-pointer" onClick={() => setFocusedNodeId(null)} />
-          </Badge>
-        )}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="graph">Carte</TabsTrigger>
+          <TabsTrigger value="navigation">Navigation</TabsTrigger>
+        </TabsList>
 
-      {rawData.nodes.length === 0 ? (
-        <Card className="bg-card border-border border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Network className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Carte vide</h3>
-            <p className="text-sm text-muted-foreground">Ajoutez des elements et des liens pour les voir ici</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="h-[600px] rounded-lg border border-border overflow-hidden bg-background" data-testid="mindmap-canvas">
-          <ReactFlow
-            nodes={nodes} edges={edges}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={handleConnect} onEdgesDelete={handleEdgesDelete}
-            onNodeClick={handleNodeClick}
-            onNodeDragStart={handleNodeDragStart}
-            onNodeDragStop={handleNodeDragStop}
-            onMoveEnd={handleMoveEnd}
-            defaultViewport={defaultViewport}
-            nodeTypes={nodeTypes} fitView={!hasSavedViewport} minZoom={0.1} maxZoom={2}
-            proOptions={{ hideAttribution: true }}
-            connectionLineStyle={{ stroke: '#888', strokeWidth: 2 }}
-          >
-            <Background color="#333" gap={20} />
-            <Controls />
-            <MiniMap nodeColor={(n) => n.data?.color || '#888'} style={{ backgroundColor: 'hsl(240 6% 7%)' }} />
-          </ReactFlow>
-        </div>
-      )}
+        <TabsContent value="graph" className="space-y-4">
+          <div className="flex flex-wrap gap-2 items-center">
+            {Object.entries(TYPE_LABELS).map(([key, label]) => (
+              <Badge key={key} variant="outline" className="gap-1.5 text-xs">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[key] }} />{label}
+              </Badge>
+            ))}
+            {focusedNodeName && (
+              <Badge variant="secondary" className="gap-1.5 ml-4">
+                Focus: {focusedNodeName}
+                <X className="h-3 w-3 cursor-pointer" onClick={() => setFocusedNodeId(null)} />
+              </Badge>
+            )}
+          </div>
 
-      <p className="text-xs text-muted-foreground text-center">
-        {rawData.nodes.length} elements, {rawData.edges.length} connexions — Cliquez sur un noeud pour voir ses connexions, glissez d'un point a un autre pour creer un lien
-      </p>
+          {rawData.nodes.length === 0 ? (
+            <Card className="bg-card border-border border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <Network className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">Carte vide</h3>
+                <p className="text-sm text-muted-foreground">Ajoutez des elements et des liens pour les voir ici</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="h-[600px] rounded-lg border border-border overflow-hidden bg-background" data-testid="mindmap-canvas">
+              <ReactFlow
+                nodes={nodes} edges={edges}
+                onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+                onConnect={handleConnect} onEdgesDelete={handleEdgesDelete}
+                onNodeClick={handleNodeClick}
+                onNodeDragStart={handleNodeDragStart}
+                onNodeDragStop={handleNodeDragStop}
+                onMoveEnd={handleMoveEnd}
+                defaultViewport={defaultViewport}
+                nodeTypes={nodeTypes} fitView={!hasSavedViewport} minZoom={0.1} maxZoom={2}
+                proOptions={{ hideAttribution: true }}
+                connectionLineStyle={{ stroke: '#888', strokeWidth: 2 }}
+              >
+                <Background color="#333" gap={20} />
+                <Controls />
+                <MiniMap nodeColor={(n) => n.data?.color || '#888'} style={{ backgroundColor: 'hsl(240 6% 7%)' }} />
+              </ReactFlow>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground text-center">
+            {rawData.nodes.length} elements, {rawData.edges.length} connexions — Cliquez sur un noeud pour voir ses connexions, glissez d'un point a un autre pour creer un lien
+          </p>
+        </TabsContent>
+
+        <TabsContent value="navigation" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={navPath.length === 0}
+              onClick={() => setNavPath((prev) => prev.slice(0, -1))}
+            >
+              Retour
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={navPath.length === 0}
+              onClick={() => setNavPath([])}
+            >
+              Niveau 1
+            </Button>
+            <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+              <span>Racine</span>
+              {navPath.map((id, idx) => {
+                const node = nodeById[id];
+                if (!node) return null;
+                return (
+                  <button
+                    key={`nav-crumb-${id}`}
+                    type="button"
+                    className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                    onClick={() => setNavPath(navPath.slice(0, idx + 1))}
+                  >
+                    <ChevronDown className="h-3 w-3 -rotate-90" />
+                    <span>{node.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {navNeighborNodes.length === 0 ? (
+            <Card className="bg-card border-border border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-14">
+                <Network className="h-10 w-10 text-muted-foreground mb-3" />
+                <h3 className="text-lg font-medium mb-2">Aucun voisin lié</h3>
+                <p className="text-sm text-muted-foreground">
+                  {currentNavNode ? 'Ce noeud n’a pas de lien sortant/entrant.' : 'Aucune racine de navigation trouvée.'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {navNeighborNodes.map((node) => {
+                const neighborsCount = (adjacencyMap.get(node.id)?.size || 0);
+                return (
+                  <Card key={`nav-node-${node.id}`} className="bg-card border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                    <CardContent className="py-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{node.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {TYPE_LABELS[node.type] || node.type} · {neighborsCount} lien{neighborsCount > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="h-2.5 w-2.5 rounded-full mt-1" style={{ backgroundColor: node.color || TYPE_COLORS[node.type] || '#888' }} />
+                      </div>
+                      {node.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {node.tags.slice(0, 4).map((tag) => (
+                            <Badge key={`${node.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <Badge variant="outline" className="text-xs">ID: {String(node.id).slice(0, 8)}</Badge>
+                        <Button type="button" size="sm" onClick={() => setNavPath((prev) => [...prev, node.id])}>
+                          Ouvrir
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
