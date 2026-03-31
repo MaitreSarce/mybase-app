@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { mindmapApi, tagsApi, linksApi } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ReactFlow, Background, Controls, MiniMap,
@@ -71,6 +72,7 @@ const MINDMAP_VIEWPORT_KEY = 'mybase:mindmap:viewport:v1';
 const MAX_UNDO_STEPS = 20;
 
 const MindmapPage = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [allTags, setAllTags] = useState([]);
@@ -469,6 +471,40 @@ const MindmapPage = () => {
   }, [queueSaveViewState]);
 
   const handleRefresh = () => { setRefreshing(true); fetchData(); };
+  const handleEditNode = useCallback((node) => {
+    if (!node?.id || !node?.type) return;
+    const encodedId = encodeURIComponent(node.id);
+    if (node.type === 'inventory') {
+      navigate(`/inventory?editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'wishlist') {
+      navigate(`/wishlist?editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'content') {
+      navigate(`/content?editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'project') {
+      navigate(`/projects?editType=projects&editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'task') {
+      navigate(`/projects?editType=tasks&editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'collection') {
+      navigate(`/collections?editId=${encodedId}`);
+      return;
+    }
+    if (node.type === 'portfolio' || node.type === 'portfolio_physical') {
+      navigate('/portfolio');
+      toast.info('Ouverture de la page portefeuille.');
+      return;
+    }
+    toast.info('Type non pris en charge pour l’édition directe.');
+  }, [navigate]);
 
   const moveHierarchyType = (index, direction) => {
     const nextIndex = index + direction;
@@ -668,16 +704,21 @@ const MindmapPage = () => {
                       )}
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <Badge variant="outline" className="text-xs">ID: {String(node.id).slice(0, 8)}</Badge>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setNavPath((prev) => [...prev, node.id]);
-                            setNavVisitedIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
-                          }}
-                        >
-                          Ouvrir
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => handleEditNode(node)}>
+                            Modifier
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setNavPath((prev) => [...prev, node.id]);
+                              setNavVisitedIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
+                            }}
+                          >
+                            Ouvrir
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
