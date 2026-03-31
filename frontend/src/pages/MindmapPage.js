@@ -117,13 +117,22 @@ const MindmapPage = () => {
     return map;
   }, [rawData.edges]);
 
-  const navRootNodes = useMemo(() => rawData.nodes
-    .filter((node) => {
-      if (node.type === 'collection') return true;
-      if (node.type === 'project' || node.type === 'content') return !node.parent_id;
-      return false;
-    })
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '')), [rawData.nodes]);
+  const navRootNodes = useMemo(() => {
+    const hasIncomingFromSameType = (node) => rawData.edges.some((edge) => {
+      if (edge.target !== node.id) return false;
+      const src = nodeById[edge.source];
+      return src && src.type === node.type;
+    });
+
+    return rawData.nodes
+      .filter((node) => {
+        if (node.type === 'collection') return true;
+        if (node.type !== 'project' && node.type !== 'content') return false;
+        if (node.parent_id) return false;
+        return !hasIncomingFromSameType(node);
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [rawData.nodes, rawData.edges, nodeById]);
 
   const currentNavNodeId = navPath.length ? navPath[navPath.length - 1] : null;
   const currentNavNode = currentNavNodeId ? nodeById[currentNavNodeId] || null : null;

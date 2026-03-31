@@ -4022,6 +4022,7 @@ async def get_mindmap_data(user: dict = Depends(get_current_user), perspective: 
                 "name": name,
                 "color": config["color"],
                 "tags": tags,
+                "parent_id": item.get("parent_id"),
             })
             
             # Add link edges
