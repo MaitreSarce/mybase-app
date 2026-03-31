@@ -81,6 +81,7 @@ const MindmapPage = () => {
   const [filterTags, setFilterTags] = useState([]);
   const [activeTab, setActiveTab] = useState('graph');
   const [navPath, setNavPath] = useState([]);
+  const [navVisitedIds, setNavVisitedIds] = useState([]);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
   const [layoutMode, setLayoutMode] = useState('tree');
   const [hierarchyOrder, setHierarchyOrder] = useState(HIERARCHY_PRESETS.projects_first.order);
@@ -126,14 +127,20 @@ const MindmapPage = () => {
 
   const currentNavNodeId = navPath.length ? navPath[navPath.length - 1] : null;
   const currentNavNode = currentNavNodeId ? nodeById[currentNavNodeId] || null : null;
+  const navVisitedSet = useMemo(() => new Set(navVisitedIds), [navVisitedIds]);
   const navNeighborNodes = useMemo(() => {
-    if (!currentNavNodeId) return navRootNodes;
+    if (!currentNavNodeId) {
+      return navRootNodes
+        .filter((node) => !navVisitedSet.has(node.id))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
     const neighbors = Array.from(adjacencyMap.get(currentNavNodeId) || []);
     return neighbors
       .map((id) => nodeById[id])
       .filter(Boolean)
+      .filter((node) => !navVisitedSet.has(node.id))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [adjacencyMap, currentNavNodeId, navRootNodes, nodeById]);
+  }, [adjacencyMap, currentNavNodeId, navRootNodes, nodeById, navVisitedSet]);
 
   useEffect(() => {
     if (!navPath.length) return;
@@ -141,6 +148,13 @@ const MindmapPage = () => {
     const cleaned = navPath.filter((id) => validIds.has(id));
     if (cleaned.length !== navPath.length) setNavPath(cleaned);
   }, [navPath, rawData.nodes]);
+
+  useEffect(() => {
+    if (!navVisitedIds.length) return;
+    const validIds = new Set(rawData.nodes.map((node) => node.id));
+    const cleaned = navVisitedIds.filter((id) => validIds.has(id));
+    if (cleaned.length !== navVisitedIds.length) setNavVisitedIds(cleaned);
+  }, [navVisitedIds, rawData.nodes]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -580,8 +594,11 @@ const MindmapPage = () => {
               type="button"
               variant="ghost"
               size="sm"
-              disabled={navPath.length === 0}
-              onClick={() => setNavPath([])}
+              disabled={navPath.length === 0 && navVisitedIds.length === 0}
+              onClick={() => {
+                setNavPath([]);
+                setNavVisitedIds([]);
+              }}
             >
               Niveau 1
             </Button>
@@ -611,7 +628,9 @@ const MindmapPage = () => {
                 <Network className="h-10 w-10 text-muted-foreground mb-3" />
                 <h3 className="text-lg font-medium mb-2">Aucun voisin lié</h3>
                 <p className="text-sm text-muted-foreground">
-                  {currentNavNode ? 'Ce noeud n’a pas de lien sortant/entrant.' : 'Aucune racine de navigation trouvée.'}
+                  {currentNavNode
+                    ? 'Ce noeud n’a pas de voisin non visité.'
+                    : 'Aucune racine non visitée. Cliquez sur "Niveau 1" pour réinitialiser la navigation.'}
                 </p>
               </CardContent>
             </Card>
@@ -640,7 +659,14 @@ const MindmapPage = () => {
                       )}
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <Badge variant="outline" className="text-xs">ID: {String(node.id).slice(0, 8)}</Badge>
-                        <Button type="button" size="sm" onClick={() => setNavPath((prev) => [...prev, node.id])}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setNavPath((prev) => [...prev, node.id]);
+                            setNavVisitedIds((prev) => (prev.includes(node.id) ? prev : [...prev, node.id]));
+                          }}
+                        >
                           Ouvrir
                         </Button>
                       </div>
